@@ -1,0 +1,14 @@
+# Ignore the heavy libraries (we reinstall these on the new system)
+node_modules/
+venv/
+env/
+
+# Ignore temporary Python files
+__pycache__/
+*.pyc
+
+# Ignore the database (you usually want a fresh one or a real DB)
+db.sqlite3
+
+# Ignore secrets
+.env

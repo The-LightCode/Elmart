@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta name="theme-color" content="#0A2540"/>
+<meta name="description" content="El-Mart — Every Business, One Market"/>
+<link rel="manifest" href="manifest.json"/>
+<title>El-Mart</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Manrope:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="style.css"/>
+</head>
+<body>
+
+<!-- ===================== VIEWS ===================== -->
+<div id="app">
+
+  <!-- LANDING PAGE -->
+  <div id="view-landing" class="view active">
+    <nav class="nav-bar">
+      <div class="logo">El<span>Mart</span></div>
+      <div class="nav-links">
+        <button class="btn-ghost" onclick="showView('view-login')">Log In</button>
+        <button class="btn-primary" onclick="showView('view-signup')">Join Free</button>
+      </div>
+    </nav>
+    <section class="hero">
+      <div class="hero-badge">🌍 Nigeria's Digital Market Square</div>
+      <h1 class="hero-title">Every Business<br/><span class="accent">One Market</span></h1>
+      <p class="hero-sub">From Alaba market to Abuja CBD — El-Mart gives every seller a world-class digital storefront. Connect, trade, and grow.</p>
+      <div class="hero-ctas">
+        <button class="btn-primary big" onclick="showSignup('business')">Open Your Store</button>
+        <button class="btn-outline big" onclick="showSignup('customer')">Shop Now</button>
+      </div>
+      <div class="hero-stats">
+        <div class="stat"><span class="stat-num">12,000+</span><span>Businesses</span></div>
+        <div class="stat"><span class="stat-num">4M+</span><span>Products</span></div>
+        <div class="stat"><span class="stat-num">36</span><span>States</span></div>
+      </div>
+    </section>
+    <section class="features-strip">
+      <div class="feat"><div class="feat-icon">🏪</div><h3>Your Own Store</h3><p>Personalized storefront with your logo, colors, and branding.</p></div>
+      <div class="feat"><div class="feat-icon">💬</div><h3>Live Chat</h3><p>Chat, call, video call with buyers and businesses in real time.</p></div>
+      <div class="feat"><div class="feat-icon">🤖</div><h3>AI Chatbot</h3><p>Auto-replies keep your store open 24/7 even when you're away.</p></div>
+      <div class="feat"><div class="feat-icon">📧</div><h3>Newsletters</h3><p>Send email blasts to connected customers about new arrivals.</p></div>
+      <div class="feat"><div class="feat-icon">📍</div><h3>Location Sharing</h3><p>Share your exact location when customers need to find you.</p></div>
+      <div class="feat"><div class="feat-icon">🤝</div><h3>Retail & Wholesale</h3><p>Set different pricing tiers for retailers and wholesalers.</p></div>
+    </section>
+    <footer class="landing-footer">
+      <div class="logo">El<span>Mart</span></div>
+      <p>© 2026 El-Mart. Bridging the digital divide, one store at a time.</p>
+    </footer>
+  </div>
+
+  <!-- SIGNUP -->
+  <div id="view-signup" class="view">
+    <div class="auth-page">
+      <button class="back-btn" onclick="showView('view-landing')">← Back</button>
+      <div class="auth-box">
+        <div class="logo center">El<span>Mart</span></div>
+        <h2>Create Your Account</h2>
+        <p class="auth-sub">Choose how you want to use El-Mart</p>
+        <div class="role-tabs">
+          <button class="role-tab active" id="tab-customer" onclick="setRole('customer')">🛒 Customer</button>
+          <button class="role-tab" id="tab-business" onclick="setRole('business')">🏪 Business Owner</button>
+        </div>
+        <div class="form-group">
+          <label>Full Name</label>
+          <input type="text" id="su-name" placeholder="e.g. Adama Oyemechi"/>
+        </div>
+        <div class="form-group">
+          <label>Email Address</label>
+          <input type="email" id="su-email" placeholder="you@example.com"/>
+        </div>
+        <div class="form-group">
+          <label>Phone Number</label>
+          <input type="tel" id="su-phone" placeholder="+234 801 234 5678"/>
+        </div>
+        <div class="form-group">
+          <label>Password</label>
+          <input type="password" id="su-pass" placeholder="Create a strong password"/>
+        </div>
+        <div class="form-group" id="biz-extra" style="display:none">
+          <label>Business / Company Name</label>
+          <input type="text" id="su-bizname" placeholder="e.g. Okonkwo Electronics Ltd"/>
+        </div>
+        <div class="form-group" id="biz-cat-wrap" style="display:none">
+          <label>Business Category</label>
+          <select id="su-bizcat">
+            <option value="">Select category</option>
+            <option>Electronics & Gadgets</option>
+            <option>Fashion & Apparel</option>
+            <option>Food & Groceries</option>
+            <option>Health & Beauty</option>
+            <option>Building & Construction</option>
+            <option>Automobiles & Parts</option>
+            <option>Agriculture & Farm Produce</option>
+            <option>Furniture & Home Décor</option>
+            <option>Services & Consulting</option>
+            <option>Other</option>
+          </select>
+        </div>
+        <div class="form-group" id="biz-type-wrap" style="display:none">
+          <label>Seller Type</label>
+          <div class="radio-group">
+            <label class="radio-opt"><input type="radio" name="sellertype" value="retail" checked/> Retailer</label>
+            <label class="radio-opt"><input type="radio" name="sellertype" value="wholesale"/> Wholesaler</label>
+            <label class="radio-opt"><input type="radio" name="sellertype" value="both"/> Both</label>
+          </div>
+        </div>
+        <div class="form-group" id="biz-loc-wrap" style="display:none">
+          <label>Business Location / State</label>
+          <select id="su-loc">
+            <option>Lagos</option><option>Abuja (FCT)</option><option>Kano</option><option>Rivers</option><option>Oyo</option><option>Anambra</option><option>Enugu</option><option>Delta</option><option>Other</option>
+          </select>
+        </div>
+        <div class="form-check">
+          <input type="checkbox" id="su-newsletter"/>
+          <label for="su-newsletter">I consent to receive email newsletters and product updates</label>
+        </div>
+        <button class="btn-primary full" onclick="handleSignup()">Create Account</button>
+        <p class="auth-switch">Already have an account? <a href="#" onclick="showView('view-login')">Log In</a></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- LOGIN -->
+  <div id="view-login" class="view">
+    <div class="auth-page">
+      <button class="back-btn" onclick="showView('view-landing')">← Back</button>
+      <div class="auth-box">
+        <div class="logo center">El<span>Mart</span></div>
+        <h2>Welcome Back</h2>
+        <p class="auth-sub">Sign in to your El-Mart account</p>
+        <div class="form-group">
+          <label>Email Address</label>
+          <input type="email" placeholder="you@example.com"/>
+        </div>
+        <div class="form-group">
+          <label>Password</label>
+          <input type="password" placeholder="Your password"/>
+        </div>
+        <button class="btn-primary full" onclick="handleLogin()">Log In</button>
+        <div class="login-demos">
+          <p>Try a demo:</p>
+          <button class="demo-btn" onclick="loginAs('customer')">Demo as Customer</button>
+          <button class="demo-btn" onclick="loginAs('business')">Demo as Business Owner</button>
+        </div>
+        <p class="auth-switch">New here? <a href="#" onclick="showView('view-signup')">Create an account</a></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- CUSTOMER HOME -->
+  <div id="view-customer" class="view">
+    <div class="app-shell">
+      <header class="app-header">
+        <div class="logo sm">El<span>Mart</span></div>
+        <div class="search-bar">
+          <input type="text" id="search-input" placeholder="Search products, stores, categories..." oninput="handleSearch()"/>
+          <button class="search-btn">🔍</button>
+        </div>
+        <div class="header-actions">
+          <button class="icon-btn" onclick="showView('view-chat')">💬<span class="badge">3</span></button>
+          <button class="icon-btn">🔔<span class="badge">5</span></button>
+          <div class="avatar" onclick="showView('view-customer-profile')">AO</div>
+        </div>
+      </header>
+      <div class="filter-bar">
+        <button class="filter-chip active" onclick="filterCat(this,'all')">All</button>
+        <button class="filter-chip" onclick="filterCat(this,'electronics')">Electronics</button>
+        <button class="filter-chip" onclick="filterCat(this,'fashion')">Fashion</button>
+        <button class="filter-chip" onclick="filterCat(this,'food')">Food</button>
+        <button class="filter-chip" onclick="filterCat(this,'health')">Health</button>
+        <button class="filter-chip" onclick="filterCat(this,'agriculture')">Agriculture</button>
+        <button class="filter-chip" onclick="filterCat(this,'furniture')">Furniture</button>
+        <button class="filter-chip" onclick="filterCat(this,'autos')">Autos</button>
+      </div>
+      <div class="main-feed">
+        <div class="feed-left">
+          <!-- Social Feed -->
+          <div class="section-title">📢 Latest Posts</div>
+          <div id="posts-feed">
+            <!-- Posts injected by JS -->
+          </div>
+        </div>
+        <div class="feed-right">
+          <div class="section-title">🏪 Nearby Stores</div>
+          <div id="stores-list"></div>
+          <div class="section-title" style="margin-top:20px">🤖 AI Advisor</div>
+          <div class="ai-advisor-box">
+            <p>Ask me about product value, price comparisons, or what to buy!</p>
+            <div class="ai-input-row">
+              <input type="text" id="ai-input" placeholder="e.g. Is ₦45,000 fair for an iPhone 11?"/>
+              <button onclick="askAI()">Ask</button>
+            </div>
+            <div id="ai-response"></div>
+          </div>
+        </div>
+      </div>
+      <nav class="bottom-nav">
+        <button class="bnav-btn active" onclick="setBottomNav(this,'feed')">🏠<span>Home</span></button>
+        <button class="bnav-btn" onclick="setBottomNav(this,'explore'); showView('view-explore')">🔍<span>Explore</span></button>
+        <button class="bnav-btn" onclick="setBottomNav(this,'chat'); showView('view-chat')">💬<span>Chats</span></button>
+        <button class="bnav-btn" onclick="setBottomNav(this,'profile')">👤<span>Profile</span></button>
+      </nav>
+    </div>
+  </div>
+
+  <!-- EXPLORE / SEARCH -->
+  <div id="view-explore" class="view">
+    <div class="app-shell">
+      <header class="app-header">
+        <button class="back-btn sm" onclick="showView('view-customer')">←</button>
+        <div class="search-bar wide">
+          <input type="text" id="explore-search" placeholder="Search stores, goods, location..." oninput="handleExploreSearch()"/>
+          <button class="search-btn">🔍</button>
+        </div>
+      </header>
+      <div class="explore-filters">
+        <div class="form-group inline">
+          <label>Category</label>
+          <select id="exp-cat" onchange="handleExploreSearch()">
+            <option value="">All</option>
+            <option>Electronics</option><option>Fashion</option><option>Food</option><option>Health</option><option>Agriculture</option>
+          </select>
+        </div>
+        <div class="form-group inline">
+          <label>Location</label>
+          <select id="exp-loc" onchange="handleExploreSearch()">
+            <option value="">All States</option>
+            <option>Lagos</option><option>Abuja</option><option>Kano</option><option>Rivers</option><option>Oyo</option>
+          </select>
+        </div>
+        <div class="form-group inline">
+          <label>Type</label>
+          <select id="exp-type" onchange="handleExploreSearch()">
+            <option value="">All</option>
+            <option>Retail</option><option>Wholesale</option>
+          </select>
+        </div>
+      </div>
+      <div id="explore-results" class="explore-grid"></div>
+      <nav class="bottom-nav">
+        <button class="bnav-btn" onclick="showView('view-customer')">🏠<span>Home</span></button>
+        <button class="bnav-btn active">🔍<span>Explore</span></button>
+        <button class="bnav-btn" onclick="showView('view-chat')">💬<span>Chats</span></button>
+        <button class="bnav-btn">👤<span>Profile</span></button>
+      </nav>
+    </div>
+  </div>
+
+  <!-- STORE VIEW (Customer sees a business store) -->
+  <div id="view-store" class="view">
+    <div id="store-page"></div>
+    <nav class="bottom-nav">
+      <button class="bnav-btn" onclick="showView('view-customer')">🏠<span>Home</span></button>
+      <button class="bnav-btn" onclick="showView('view-explore')">🔍<span>Explore</span></button>
+      <button class="bnav-btn" onclick="showView('view-chat')">💬<span>Chat</span></button>
+      <button class="bnav-btn">❤️<span>Save</span></button>
+    </nav>
+  </div>
+
+  <!-- CHAT VIEW -->
+  <div id="view-chat" class="view">
+    <div class="app-shell">
+      <header class="app-header">
+        <button class="back-btn sm" onclick="goBack()">←</button>
+        <h2 style="flex:1;font-size:1.1rem">Messages</h2>
+      </header>
+      <div class="chat-list">
+        <div class="chat-item" onclick="openChat('Okonkwo Electronics','OE')">
+          <div class="chat-avatar biz">OE</div>
+          <div class="chat-info">
+            <div class="chat-name">Okonkwo Electronics</div>
+            <div class="chat-preview">Hi! How can we help you today? 👋</div>
+          </div>
+          <div class="chat-meta"><div class="chat-time">2m ago</div><div class="chat-unread">2</div></div>
+        </div>
+        <div class="chat-item" onclick="openChat('FashionHub Lagos','FL')">
+          <div class="chat-avatar biz">FL</div>
+          <div class="chat-info">
+            <div class="chat-name">FashionHub Lagos</div>
+            <div class="chat-preview">Your order has been dispatched! 📦</div>
+          </div>
+          <div class="chat-meta"><div class="chat-time">1hr</div><div class="chat-unread">1</div></div>
+        </div>
+        <div class="chat-item" onclick="openChat('Ngozi Adeyemi','NA')">
+          <div class="chat-avatar">NA</div>
+          <div class="chat-info">
+            <div class="chat-name">Ngozi Adeyemi</div>
+            <div class="chat-preview">Did you check that electronics store I sent?</div>
+          </div>
+          <div class="chat-meta"><div class="chat-time">Yesterday</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CHAT OPEN -->
+  <div id="view-chat-open" class="view">
+    <div class="chat-open-shell">
+      <header class="chat-header">
+        <button class="back-btn sm" onclick="showView('view-chat')">←</button>
+        <div class="chat-header-avatar" id="chat-avatar-disp"></div>
+        <div class="chat-header-info">
+          <div class="chat-header-name" id="chat-name-disp"></div>
+          <div class="chat-header-status">Online</div>
+        </div>
+        <div class="chat-header-actions">
+          <button class="icon-btn" title="Voice Call">📞</button>
+          <button class="icon-btn" title="Video Call">📹</button>
+          <button class="icon-btn" title="Share Location">📍</button>
+        </div>
+      </header>
+      <div class="chat-messages" id="chat-messages-area">
+        <div class="msg bot"><div class="msg-bubble">Hi! 👋 Welcome to our store. How can we help you today? Our team is ready to assist. (Bot)</div></div>
+      </div>
+      <div class="chat-input-bar">
+        <button class="icon-btn" title="Attach Image">📎</button>
+        <input type="text" id="chat-msg-input" placeholder="Type a message..."/>
+        <button class="send-btn" onclick="sendChatMsg()">➤</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- BUSINESS OWNER DASHBOARD -->
+  <div id="view-business" class="view">
+    <div class="biz-shell">
+      <div class="biz-sidebar">
+        <div class="logo sm">El<span>Mart</span></div>
+        <div class="biz-welcome">
+          <div class="biz-welcome-text">Welcome back,</div>
+          <div class="biz-ceo">CEO 👑</div>
+          <div class="biz-name-disp">Okonkwo Electronics</div>
+        </div>
+        <nav class="biz-nav">
+          <button class="biz-nav-btn active" onclick="bizTab(this,'dashboard')">📊 Dashboard</button>
+          <button class="biz-nav-btn" onclick="bizTab(this,'store'); showView('view-biz-store')">🏪 My Store</button>
+          <button class="biz-nav-btn" onclick="bizTab(this,'products'); showView('view-biz-products')">📦 Products</button>
+          <button class="biz-nav-btn" onclick="bizTab(this,'posts')">📸 Posts</button>
+          <button class="biz-nav-btn" onclick="bizTab(this,'customers')">👥 Customers</button>
+          <button class="biz-nav-btn" onclick="bizTab(this,'newsletter')">📧 Newsletter</button>
+          <button class="biz-nav-btn" onclick="bizTab(this,'chat'); showView('view-chat')">💬 Chats</button>
+          <button class="biz-nav-btn" onclick="bizTab(this,'ads')">🚀 Sponsored Ads</button>
+          <button class="biz-nav-btn" onclick="bizTab(this,'settings')">⚙️ Settings</button>
+        </nav>
+        <button class="btn-ghost sm logout-btn" onclick="showView('view-landing')">← Log Out</button>
+      </div>
+      <div class="biz-main">
+        <div class="biz-topbar">
+          <h1 class="biz-page-title">Dashboard Overview</h1>
+          <div class="biz-topbar-right">
+            <button class="btn-primary sm" onclick="showView('view-biz-store')">👁 View My Store</button>
+            <div class="avatar">OE</div>
+          </div>
+        </div>
+        <div class="biz-stats-row">
+          <div class="biz-stat-card"><div class="bstat-icon">👁</div><div class="bstat-val">1,284</div><div class="bstat-lbl">Store Views</div></div>
+          <div class="biz-stat-card"><div class="bstat-icon">💬</div><div class="bstat-val">47</div><div class="bstat-lbl">Messages</div></div>
+          <div class="biz-stat-card"><div class="bstat-icon">📦</div><div class="bstat-val">38</div><div class="bstat-lbl">Products Listed</div></div>
+          <div class="biz-stat-card"><div class="bstat-icon">❤️</div><div class="bstat-val">312</div><div class="bstat-lbl">Followers</div></div>
+        </div>
+        <div class="biz-dash-grid">
+          <div class="biz-dash-card">
+            <div class="biz-dash-card-title">📢 Quick Post</div>
+            <textarea placeholder="Share a new product, offer, or update with your followers..." rows="3"></textarea>
+            <div class="post-actions-row">
+              <button class="icon-btn" title="Add Image">🖼</button>
+              <button class="icon-btn" title="Add Video">🎬</button>
+              <button class="btn-primary sm" onclick="toast('Post published!')">Post</button>
+            </div>
+          </div>
+          <div class="biz-dash-card">
+            <div class="biz-dash-card-title">🔔 Recent Activity</div>
+            <div class="activity-list">
+              <div class="activity-item"><span class="act-icon">💬</span><span>Adeola Bello sent you a message</span><span class="act-time">5m</span></div>
+              <div class="activity-item"><span class="act-icon">❤️</span><span>New follower: FreshMart Lagos</span><span class="act-time">20m</span></div>
+              <div class="activity-item"><span class="act-icon">👁</span><span>Your Samsung A55 post got 45 views</span><span class="act-time">1hr</span></div>
+              <div class="activity-item"><span class="act-icon">📧</span><span>Newsletter sent to 142 customers</span><span class="act-time">3hr</span></div>
+            </div>
+          </div>
+          <div class="biz-dash-card full">
+            <div class="biz-dash-card-title">📦 Low Stock Alert</div>
+            <div class="low-stock-list">
+              <div class="low-stock-item">
+                <span>Samsung Galaxy A55</span>
+                <span class="stock-count warn">3 left</span>
+                <button class="btn-ghost xs" onclick="toast('Marked as Out of Stock')">Mark Out of Stock</button>
+              </div>
+              <div class="low-stock-item">
+                <span>Adidas Joggers (M)</span>
+                <span class="stock-count danger">1 left</span>
+                <button class="btn-ghost xs" onclick="toast('Marked as Out of Stock')">Mark Out of Stock</button>
+              </div>
+              <div class="low-stock-item">
+                <span>iPhone 14 Pro (Black)</span>
+                <span class="stock-count good">12 in stock</span>
+                <button class="btn-ghost xs">Edit</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- Mobile bottom nav for biz -->
+    <nav class="bottom-nav biz-bottom">
+      <button class="bnav-btn active">📊<span>Dash</span></button>
+      <button class="bnav-btn" onclick="showView('view-biz-products')">📦<span>Products</span></button>
+      <button class="bnav-btn" onclick="showView('view-chat')">💬<span>Chat</span></button>
+      <button class="bnav-btn" onclick="showView('view-biz-store')">🏪<span>Store</span></button>
+    </nav>
+  </div>
+
+  <!-- BIZ: MY STORE EDITOR -->
+  <div id="view-biz-store" class="view">
+    <div class="biz-shell">
+      <div class="biz-sidebar">
+        <div class="logo sm">El<span>Mart</span></div>
+        <nav class="biz-nav">
+          <button class="biz-nav-btn" onclick="showView('view-business')">📊 Dashboard</button>
+          <button class="biz-nav-btn active">🏪 My Store</button>
+          <button class="biz-nav-btn" onclick="showView('view-biz-products')">📦 Products</button>
+        </nav>
+        <button class="btn-ghost sm logout-btn" onclick="showView('view-landing')">← Log Out</button>
+      </div>
+      <div class="biz-main">
+        <div class="biz-topbar">
+          <h1 class="biz-page-title">🏪 Store Customizer</h1>
+          <div class="biz-topbar-right">
+            <button class="btn-primary sm" onclick="previewStore()">👁 Preview Store</button>
+          </div>
+        </div>
+        <div class="store-editor-grid">
+          <div class="editor-panel">
+            <h3>Branding</h3>
+            <div class="form-group">
+              <label>Store Name</label>
+              <input type="text" id="store-name-input" value="Okonkwo Electronics" oninput="updatePreview()"/>
+            </div>
+            <div class="form-group">
+              <label>Tagline</label>
+              <input type="text" id="store-tagline" value="Your Tech Partner in Lagos" oninput="updatePreview()"/>
+            </div>
+            <div class="form-group">
+              <label>Logo Upload</label>
+              <div class="upload-box">📷 Click to upload logo</div>
+            </div>
+            <div class="form-group">
+              <label>Cover Image</label>
+              <div class="upload-box wide">🖼 Upload store banner (1200×400)</div>
+            </div>
+            <h3>Theme Colors</h3>
+            <div class="color-row">
+              <div class="form-group">
+                <label>Primary Color</label>
+                <input type="color" id="store-color1" value="#0A2540" oninput="updatePreview()"/>
+              </div>
+              <div class="form-group">
+                <label>Accent Color</label>
+                <input type="color" id="store-color2" value="#FF6B35" oninput="updatePreview()"/>
+              </div>
+            </div>
+            <h3>Store Info</h3>
+            <div class="form-group">
+              <label>About Your Store</label>
+              <textarea id="store-about" rows="3">Trusted electronics dealer in Lagos since 2015. Quality guaranteed.</textarea>
+            </div>
+            <div class="form-group">
+              <label>WhatsApp / Phone</label>
+              <input type="text" value="+234 802 345 6789"/>
+            </div>
+            <div class="form-group">
+              <label>Chatbot Greeting Message</label>
+              <textarea rows="2">Hi! 👋 Welcome to our store. We'll be with you shortly. How can we help?</textarea>
+            </div>
+            <div class="form-check">
+              <input type="checkbox" id="chatbot-on" checked/>
+              <label for="chatbot-on">Enable Chatbot auto-replies when offline</label>
+            </div>
+            <div class="form-check">
+              <input type="checkbox" id="call-on" checked/>
+              <label for="call-on">Allow customers to call your store</label>
+            </div>
+            <button class="btn-primary full" onclick="toast('Store settings saved!')">Save Store Settings</button>
+          </div>
+          <div class="preview-panel">
+            <h3>Live Preview</h3>
+            <div class="store-preview-frame" id="store-preview-frame">
+              <div class="sp-header" id="sp-header">
+                <div class="sp-logo-circle">OE</div>
+                <div>
+                  <div class="sp-name" id="sp-name">Okonkwo Electronics</div>
+                  <div class="sp-tagline" id="sp-tagline">Your Tech Partner in Lagos</div>
+                </div>
+              </div>
+              <div class="sp-about" id="sp-about">Trusted electronics dealer in Lagos since 2015. Quality guaranteed.</div>
+              <div class="sp-actions">
+                <button class="sp-btn" style="background:#FF6B35">💬 Chat</button>
+                <button class="sp-btn" style="background:#0A2540">📞 Call</button>
+                <button class="sp-btn outline">❤️ Follow</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BIZ: PRODUCTS -->
+  <div id="view-biz-products" class="view">
+    <div class="biz-shell">
+      <div class="biz-sidebar">
+        <div class="logo sm">El<span>Mart</span></div>
+        <nav class="biz-nav">
+          <button class="biz-nav-btn" onclick="showView('view-business')">📊 Dashboard</button>
+          <button class="biz-nav-btn" onclick="showView('view-biz-store')">🏪 My Store</button>
+          <button class="biz-nav-btn active">📦 Products</button>
+        </nav>
+        <button class="btn-ghost sm logout-btn" onclick="showView('view-landing')">← Log Out</button>
+      </div>
+      <div class="biz-main">
+        <div class="biz-topbar">
+          <h1 class="biz-page-title">📦 Products & Inventory</h1>
+          <button class="btn-primary sm" onclick="showAddProduct()">+ Add Product</button>
+        </div>
+        <!-- Add Product Modal -->
+        <div id="add-product-modal" class="modal-overlay" style="display:none">
+          <div class="modal-box">
+            <h3>Add New Product</h3>
+            <div class="form-group">
+              <label>Product Name</label>
+              <input type="text" id="np-name" placeholder="e.g. iPhone 15 Pro Max"/>
+            </div>
+            <div class="form-group">
+              <label>Category</label>
+              <select id="np-cat">
+                <option>Electronics</option><option>Fashion</option><option>Food</option><option>Health</option><option>Agriculture</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Price (₦)</label>
+              <input type="number" id="np-price" placeholder="0.00"/>
+            </div>
+            <div class="form-group">
+              <label>Wholesale Price (₦) — optional</label>
+              <input type="number" id="np-wprice" placeholder="0.00"/>
+            </div>
+            <div class="form-group">
+              <label>Description</label>
+              <textarea id="np-desc" rows="2" placeholder="Describe this product..."></textarea>
+            </div>
+            <div class="form-group">
+              <label>Product Image / Video</label>
+              <div class="upload-box">📷 Upload image or short video</div>
+            </div>
+            <div class="form-group">
+              <label>Stock Status</label>
+              <select id="np-stock">
+                <option>In Stock</option>
+                <option>Out of Stock</option>
+              </select>
+            </div>
+            <div class="modal-actions">
+              <button class="btn-ghost" onclick="closeModal()">Cancel</button>
+              <button class="btn-primary" onclick="addProduct()">Add Product</button>
+            </div>
+          </div>
+        </div>
+        <div id="products-table"></div>
+      </div>
+    </div>
+    <nav class="bottom-nav biz-bottom">
+      <button class="bnav-btn" onclick="showView('view-business')">📊<span>Dash</span></button>
+      <button class="bnav-btn active">📦<span>Products</span></button>
+      <button class="bnav-btn" onclick="showView('view-chat')">💬<span>Chat</span></button>
+      <button class="bnav-btn" onclick="showView('view-biz-store')">🏪<span>Store</span></button>
+    </nav>
+  </div>
+
+</div>
+
+<!-- TOAST -->
+<div id="toast" class="toast"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
