@@ -58,6 +58,22 @@ class Message(models.Model):
     timestamp = models.DateTimeField(auto_now_add=True)
 
 # models.py
+# models.py
+class Subscriber(models.Model):
+    business = models.ForeignKey(
+        settings.AUTH_USER_MODEL, 
+        on_delete=models.CASCADE, 
+        related_name='subscribers'
+    )
+    email = models.EmailField()
+    date_subscribed = models.DateTimeField(auto_now_add=True)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        unique_together = ('business', 'email') # Prevent duplicate subs for same biz
+
+    def __str__(self):
+        return f"{self.email} subscribed to {self.business.business_name}"
 
         
 

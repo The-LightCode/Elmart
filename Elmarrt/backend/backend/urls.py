@@ -24,6 +24,7 @@ from api import views  # This tells Django where to find your 'views'
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from api.views import MessageViewSet
+from api.views import get_notifications
 
 router = DefaultRouter()
 router.register(r'messages', MessageViewSet, basename='message')
@@ -38,8 +39,18 @@ urlpatterns = [
     path('api/login/', login_user),
     path('api/my-products/', views.BusinessProductListView.as_view()),
     path('api/', include(router.urls)),
-    path('posts/', views.get_posts, name='get_posts'),
-    path('profile/update/', views.update_business_profile, name='update_profile'),
-    path('ai-advisor/', views.ai_advisor, name='ai_advisor'),
+    path('api/posts/', views.get_posts, name='get_posts'), 
+    path('api/profile/update/', views.update_business_profile, name='update_profile'),
+    path('api/ai-advisor/', views.ai_advisor, name='ai_advisor'),
+    path('api/change-password/', views.change_password, name='change_password'),
+    path('api/notifications/',  get_notifications, name='notifications-list'),
+    path('api/discover/', views.BusinessDiscoveryView.as_view(), name='discover_businesses'),
+
+     
+        # Add 'api/' to the front of these!
+    path('api/newsletter/send/', views.send_business_campaign, name='send_campaign'),
+    path('api/newsletter/subscribers/', views.get_business_subscribers, name='subscribers_list'),
+    path('api/newsletter/subscribe/<int:business_id>/', views.subscribe_to_newsletter, name='subscribe'),
+
 ]+ static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 

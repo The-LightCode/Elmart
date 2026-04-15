@@ -26,7 +26,10 @@ from rest_framework.authtoken.models import Token
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from api.serializers import BusinessProfileSerializer # Ensure this matches your serializer name
-
+from .serializers import UserSerializer, ProductSerializer, MessageSerializer
+from django.db.models import Case, When, Value, IntegerField
+# api/views.py
+from .models import User, Product, Message, Subscriber  # <--- Add Subscriber here!
 
 from .serializers import ProductSerializer
 
@@ -94,6 +97,24 @@ def login_user(request):
         "token": token.key, # React needs this!
         "user": { ... }
     })
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_notifications(request):
+    # For now, we'll fetch 'Followers' as notifications
+    # Later, you can create a dedicated Notification model
+    new_followers = request.user.followers.all().order_by('-id')[:5]
+    
+    notifs = []
+    for f in new_followers:
+        notifs.append({
+            "id": f.id,
+            "text": f"{f.username} started following you!",
+            "is_read": False,
+            "time": "Recent"
+        })
+    return Response(notifs)
+
 
 
 @api_view(['POST'])
@@ -168,20 +189,40 @@ def search_network(request):
     
     return Response(data)
 
-@api_view(['GET'])
-def get_posts(request):
-    # This will return all posts for the social feed
-    posts = Post.objects.all().order_by('-created_at')
-    # Use a simple serializer or manual dict for now
-    data = [{
-        "id": p.id,
-        "biz_name": p.business.business_name,
-        "content": p.content,
-        "biz_initials": p.business.business_name[0] if p.business.business_name else "B",
-        "time_ago": "Recently"
-    } for p in posts]
-    return Response(data)
 
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_posts(request):
+    try:
+        me = request.user
+        followed_ids = me.following.values_list('id', flat=True)
+
+        # We mark followed posts with priority '1' and others with '2'
+        products = Product.objects.annotate(
+            priority=Case(
+                When(business__id__in=followed_ids, then=Value(1)),
+                default=Value(2),
+                output_field=IntegerField(),
+            )
+        ).order_by('priority', '-created_at') # Priority first, then newest
+
+        feed_data = []
+        for prod in products:
+            is_followed = prod.business.id in followed_ids
+            feed_data.append({
+                "id": prod.id,
+                "business_name": prod.business.business_name or prod.business.username,
+                "is_followed": is_followed, # React can use this to show a 'Following' badge
+                "name": prod.name,
+                "price": str(prod.price),
+                "image": prod.image.url if prod.image else None,
+                "timestamp": prod.created_at
+            })
+        
+        return Response(feed_data)
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)
 
 @api_view(['PATCH'])
 @permission_classes([IsAuthenticated])
@@ -215,6 +256,64 @@ def toggle_follow(request, user_id):
         "following_count": me.following.count()
     })
 
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def change_password(request):
+    old_password = request.data.get("old_password")
+    new_password = request.data.get("new_password")
+    user = request.user
+    
+    if not user.check_password(old_password):
+        return Response({"error": "Current password is incorrect"}, status=400)
+    
+    user.set_password(new_password)
+    user.save()
+    return Response({"message": "Password changed"})
+
+# views.py
+@api_view(['POST'])
+def subscribe_to_newsletter(request, business_id):
+    email = request.data.get('email')
+    business = get_object_or_404(User, id=business_id)
+    
+    subscriber, created = Subscriber.objects.get_or_create(
+        business=business, 
+        email=email
+    )
+    
+    if not created and not subscriber.is_active:
+        subscriber.is_active = True
+        subscriber.save()
+        return Response({"message": "Re-subscribed successfully!"})
+    
+    return Response({"message": "Subscribed successfully!"}, status=201)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_business_subscribers(request):
+    subs = Subscriber.objects.filter(business=request.user, is_active=True)
+    data = [{"id": s.id, "email": s.email, "date": s.date_subscribed} for s in subs]
+    return Response(data)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def send_business_campaign(request):
+    message_content = request.data.get('message')
+    if not message_content:
+        return Response({"error": "Message content is required"}, status=400)
+
+    # 1. Find all active subscribers for this specific business owner
+    subscribers = Subscriber.objects.filter(business=request.user, is_active=True)
+    count = subscribers.count()
+
+    # 2. Logic for sending (For now, we log it. Later, connect to Email API)
+    print(f"CEO {request.user.business_name} is sending: {message_content} to {count} people.")
+
+    # 3. You can later create a 'Campaign' model to save history
+    return Response({
+        "message": f"Broadcast successful! Sent to {count} subscribers.",
+        "recipient_count": count
+    }, status=200)
 
 
 class ProductCreateView(generics.ListCreateAPIView):
@@ -261,6 +360,36 @@ class BusinessProductListView(generics.ListCreateAPIView):
             "products": serializer.data
         })
     
+
+
+class BusinessDiscoveryView(generics.ListAPIView):
+    serializer_class = UserSerializer
+    permission_classes = [permissions.AllowAny]
+
+    def get_queryset(self):
+        # We start with all businesses
+        queryset = User.objects.filter(is_business=True).distinct()
+        
+        # Capture the three distinct search parameters
+        name_query = self.request.query_params.get('name', None)
+        location_query = self.request.query_params.get('location', None)
+        product_query = self.request.query_params.get('product', None)
+
+        # 1. Search by Business Name
+        if name_query:
+            queryset = queryset.filter(business_name__icontains=name_query)
+        
+        # 2. Search by Location (State/City)
+        if location_query:
+            queryset = queryset.filter(location_state__iexact=location_query)
+            
+        # 3. Search by Product Name (Filtering businesses that own matching products)
+        if product_query:
+            # We filter Users who have a product in their 'products' related_name
+            queryset = queryset.filter(products__name__icontains=product_query)
+
+        return queryset.order_by('business_name')
+
 
 
 class BusinessDashboardStatsView(APIView):

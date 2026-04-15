@@ -19,14 +19,37 @@ function App() {
  const [showPassword, setShowPassword] = useState(false);
  const [selectedMedia, setSelectedMedia] = useState([]); // Stores actual files
  const [mediaPreviews, setMediaPreviews] = useState([]); // Stores URLs for display
-const [searchResults, setSearchResults] = useState([]);
+ const [searchResults, setSearchResults] = useState([]);
  const [stats, setStats] = useState({ productCount: 0, viewCount: 0,
   messageCount: 0,
   followerCount: 0});
-  
+  const [searchData, setSearchData] = useState({ name: '', location: '', product: '' });
+  const [stores, setStores] = useState([]); 
+
 
   const [recentProducts, setRecentProducts] = useState([]);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [activeSettingTab, setActiveSettingTab] = useState('branding');
+  const [campaignText, setCampaignText] = useState("");
+  const [subscribers, setSubscribers] = useState([]);
+  const [newProduct, setNewProduct] = useState({ name: '', price: '', stock: 0 });
+ 
+ const [userProfile, setUserProfile] = useState(null); 
+
   const [chatList, setChatList] = useState([]);
+
+  const [isNotifOpen, setIsNotifOpen] = useState(false);
+  const [notifications, setNotifications] = useState([]);
+
+
+ 
+
+ 
+useEffect(() => {
+  if (userProfile) fetchNotifications();
+}, [userProfile]);
+
+
   
 
 
@@ -63,15 +86,46 @@ const [searchResults, setSearchResults] = useState([]);
     }
   }, [view]);
 
+
+
+useEffect(() => {
+  if (view === 'newsletter') {
+    fetchSubscribers();
+  }
+}, [view]);
+
+
   // Define the actual fetch function here
-  const fetchSocialFeed = async () => {
+ 
+const fetchSocialFeed = async () => {
+    const token = localStorage.getItem('token'); // Get your saved token
     try {
-      const response = await axios.get('http://127.0.0.1:8000/api/posts');
+      const response = await axios.get('http://127.0.0.1:8000/api/posts', { 
+        headers: {
+          'Authorization': `Token ${token}` // Send the handshake
+        }
+      });
       setPosts(response.data);
     } catch (err) {
       console.error("Error loading feed:", err);
     }
-  };
+};
+
+
+
+const fetchNotifications = async () => {
+  const token = localStorage.getItem('token');
+  try {
+    const response = await axios.get('http://127.0.0.1:8000/api/notifications/', { 
+      headers: { 'Authorization': `Token ${token}` }
+    });
+    setNotifications(response.data);
+  } catch (err) {
+    console.error("Notif Error:", err);
+  }
+};
+
+// Auto-fetch when the app loads
 
 
   const handleFollow = async (userId) => {
@@ -95,6 +149,20 @@ const [searchResults, setSearchResults] = useState([]);
 
 
 
+const handleUpdatePassword = async () => { 
+  const token = localStorage.getItem('token');
+   try {
+    await axios.post('http://127.0.0.1:8000/api/change-password/', { 
+      old_password: oldPassword, // You'll need state for these
+      new_password: newPassword
+    }, {
+      headers: { 'Authorization': `Token ${token}` }
+    });
+    alert("Password updated successfully!");
+  } catch (err) {
+    alert(err.response?.data?.error || "Failed to update password");
+  }
+};
 
 
 
@@ -128,7 +196,6 @@ const removeMedia = (index) => {
   };
 
     // 1. REPLACES YOUR LOGIN LOGIC
-  const [userProfile, setUserProfile] = useState(null); // To store real name/biz name
 
   const handleLogin = async (e) => {
     if (e) e.preventDefault();
@@ -206,6 +273,12 @@ const removeMedia = (index) => {
   }
   };
 
+  {/* Create a helper at the top of your component or use this inline */}
+const avatarLetter = (userProfile?.business_name?.charAt(0) || 
+                     userProfile?.full_name?.charAt(0) || 
+                     userProfile?.username?.charAt(0) || "U").toUpperCase();
+
+
 
   const saveStoreSettings = async () => {
   const token = localStorage.getItem('token');
@@ -227,7 +300,33 @@ const removeMedia = (index) => {
   }
 };
 
-  const [newProduct, setNewProduct] = useState({ name: '', price: '', stock: 0 });
+  
+
+
+ const handleMultiSearch = async () => {
+  try {
+    const { name, location, product } = searchData;
+    
+    // CORRECTED URL: Added the full IP, port, path, and the ?name= variable
+   const url = `http://127.0.0.1:8000/api/discover/?name=${name}&location=${location}&product=${product}`;
+
+    
+    console.log("Searching at:", url); 
+
+    const response = await axios.get(url);
+    
+    // Check if we got data
+    if (response.data) {
+      setStores(response.data);
+      showView('explore'); 
+    }
+  } catch (err) {
+    console.error("Multi-search failed", err);
+    alert("Network error: Check if Django is running at http://127.0.0.1:8000");
+  }
+};
+
+
 
 
 const handleAddProduct = async (e) => {
@@ -273,6 +372,41 @@ const handleBack = () => {
     showView(role === 'business' ? 'business-dash' : 'customer-home');
   } else {
     showView('landing');
+  }
+};
+
+
+
+const fetchSubscribers = async () => {
+  const token = localStorage.getItem('token');
+  try {
+    const response = await axios.get('http://127.0.0.1:8000/api/newsletter/subscribers/', { 
+      headers: { 'Authorization': `Token ${token}` }
+    });
+    setSubscribers(response.data);
+  } catch (err) {
+    console.error("Failed to load subscribers:", err);
+  }
+};
+
+// Trigger fetch when the tab changes
+
+
+
+
+const sendCampaign = async () => {
+  if (!campaignText.trim()) return alert("Please write a message first!");
+  
+  const token = localStorage.getItem('token');
+  try {
+    await axios.post('http://127.0.0.1:8000/api/newsletter/send/',
+      { message: campaignText }, 
+      { headers: { 'Authorization': `Token ${token}` } }
+    );
+    alert(`Success! Message sent to ${subscribers.length} subscribers.`);
+    setCampaignText(""); // Clear the box
+  } catch (err) {
+    alert("Failed to send campaign. Check your connection.");
   }
 };
 
@@ -687,145 +821,333 @@ return (
 
                 {/* ===================== BUSINESS OWNER DASHBOARD ===================== */}
                 {view === 'business-dash' && (
-                  <div id="view-business" className="view active">
-                    <div className="biz-shell">
-                      <aside className="biz-sidebar">
-                        <div className="logo sm">El<span>Mart</span></div>
-                        <div className="biz-welcome">
-                          <div className="biz-welcome-text">Welcome back,</div>
-                          <div className="biz-ceo">{userProfile?.full_name || "CEO"} 👑</div>
-                          <div className="biz-name-disp">{userProfile?.business_name || "My Store"}</div>
-                        </div>
-                        <nav className="biz-nav">
-                          <button className="biz-nav-btn active">📊 Dashboard</button>
-                          <button className="biz-nav-btn" onClick={() => showView('biz-store')}>🏪 My Store</button>
-                          <button className="biz-nav-btn" onClick={() => showView('biz-products')}>📦 Products</button>
-                          <button className="biz-nav-btn">📸 Posts</button>
-                          <button className="biz-nav-btn">👥 Customers</button>
-                          <button className="biz-nav-btn">📧 Newsletter</button>
-                          <button className="biz-nav-btn" onClick={() => showView('chat')}>💬 Chats</button>
-                          <button className="biz-nav-btn">🚀 Sponsored Ads</button>
-                          <button className="biz-nav-btn">⚙️ Settings</button>
-                        </nav>
-                        <button className="btn-ghost sm logout-btn" onClick={() => { setUserProfile(null); showView('landing'); }}>← Log Out</button>
-                      </aside>
-
-                      <main className="biz-main">
-                        <div className="biz-topbar">
-                          <h1 className="biz-page-title">Dashboard Overview</h1>
-                          <div className="biz-topbar-right">
-                            <button className="btn-primary sm" onClick={() => showView('view-store')}>👁 View My Store</button>
-                            <div className="avatar">{userProfile?.fullName?.charAt(0) || "C"}</div>
-                          </div>
-                        </div>
-
-                        <div className="biz-stats-row">
-                          <div className="biz-stat-card">
-                            <div className="bstat-icon">👁</div>
-                            <div className="bstat-val">0</div>
-                            <div className="bstat-lbl">Store Views</div>
-                          </div>
-                          <div className="biz-stat-card">
-                            <div className="bstat-icon">💬</div>
-                            <div className="bstat-val">0</div>
-                            <div className="bstat-lbl">Messages</div>
-                          </div>
-                          <div className="biz-stat-card">
-                            <div className="bstat-icon">📦</div>
-                            <div className="bstat-val">{stats.productCount}</div>
-                            <div className="bstat-lbl">Products Listed</div>
-                          </div>
-                          <div className="biz-stat-card">
-                            <div className="bstat-icon">❤️</div>
-                            <div className="bstat-val">0</div>
-                            <div className="bstat-lbl">Followers</div>
-                          </div>
-                        </div>
-
-                        <div className="biz-dash-grid">
-                          <div className="biz-dash-card">
-                            <div className="biz-dash-card-title">📢 Quick Post</div>
-                            <textarea placeholder={`What's new at ${userProfile?.business_name || 'the store'}?`} rows="3"></textarea>
-                            <div className="post-actions-row">
-                              <button className="icon-btn" title="Add Image">🖼</button>
-                              <button className="icon-btn" title="Add Video">🎬</button>
-                              <button className="btn-primary sm">Post</button>
+                <div id="view-business" className="view active">
+                  
+                  {/* --- 1. MOBILE DRAWER (SLIDE-OUT MENU) --- */}
+                  <div className={`biz-drawer ${isMenuOpen ? 'open' : ''}`}>
+                    <div className="drawer-content">
+                      <div className="drawer-header">
+                        <div className="drawer-biz-info">
+                          <div className="avatar-big">
+                              {avatarLetter}
                             </div>
-                          </div>
-
-                          <div className="biz-dash-card">
-                            <div className="biz-dash-card-title">🔔 Recent Activity</div>
-                            <div className="activity-list">
-                              <div className="activity-item">
-                                <span className="act-icon">✨</span>
-                                <span>Welcome to El-Mart, {userProfile?.fullName}!</span>
-                                <span className="act-time">Now</span>
+                            <div className="biz-text-meta">
+                              <div className="drawer-ceo-label">
+                                {userProfile?.full_name || userProfile?.username || "Owner"} 👑
                               </div>
-                              {recentProducts && recentProducts.length > 0 ? (
-                                recentProducts.map((prod) => (
-                                  <div className="activity-item" key={prod.id}>
-                                    <span className="act-icon">📦</span>
-                                    <span>You listed a new product: <b>{prod.name}</b></span>
-                                    <span className="act-time">Recent</span>
-                                  </div>
-                                ))
-                              ) : (
-                                <p style={{fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '10px', textAlign: 'center'}}>
-                                  No products listed yet. Your recent uploads will appear here.
-                                </p>
-                              )}
+                              <div className="drawer-biz-name">
+                                {userProfile?.business_name || "Setting up your store..."}
+                              </div>
                             </div>
+
+                      </div>
+
+                        <button className="close-drawer" onClick={() => setIsMenuOpen(false)}>✕</button>
+                      </div>
+                      
+                      <nav className="drawer-nav">
+                        {/* Items that are hidden on the mobile bottom bar go here */}
+                        <button onClick={() => { showView('biz-store'); setIsMenuOpen(false); }}>🏪 My Store</button>
+                        <button onClick={() => { showView('customers'); setIsMenuOpen(false); }}>👥 Customers</button>
+                        <button onClick={() => { showView('newsletter'); setIsMenuOpen(false); }}>📧 Newsletter</button>
+                        <button onClick={() => { showView('ads'); setIsMenuOpen(false); }}>🚀 Sponsored Ads</button>
+                        <button onClick={() => { showView('settings'); setIsMenuOpen(false); }}>⚙️ Settings</button>
+                        <hr />
+                        <button className="logout-btn-drawer" onClick={() => { setUserProfile(null); showView('landing'); }}>← Log Out</button>
+                      </nav>
+                    </div>
+                    <div className="drawer-overlay" onClick={() => setIsMenuOpen(false)}></div>
+                  </div>
+
+                  {/* --- 2. MAIN LAYOUT SHELL --- */}
+                  <div className="biz-shell">
+
+                    {/* DESKTOP SIDEBAR (Hidden on mobile via CSS) */}
+                    <aside className="biz-sidebar">
+                      <div className="logo sm">El<span>Mart</span></div>
+                      <div className="biz-welcome">
+                        <div className="biz-welcome-text">Welcome back,</div>
+                        <div className="biz-ceo">{userProfile?.full_name || userProfile?.username} 👑</div>
+                        <div className="biz-name-disp">{userProfile?.business_name || "El-Mart Merchant"}</div>
+                      </div>
+
+                      <nav className="biz-nav">
+                        <button className="biz-nav-btn active">📊 Dashboard</button>
+                        <button className="biz-nav-btn" onClick={() => showView('biz-store')}>🏪 My Store</button>
+                        <button className="biz-nav-btn" onClick={() => showView('biz-products')}>📦 Products</button>
+                        <button className="biz-nav-btn">📸 Posts</button>
+                        <button className="biz-nav-btn">👥 Customers</button>
+                        <button className="biz-nav-btn">📧 Newsletter</button>
+                        <button className="biz-nav-btn" onClick={() => showView('chat')}>💬 Chats</button>
+                        <button className="biz-nav-btn">🚀 Sponsored Ads</button>
+                        <button className="biz-nav-btn">⚙️ Settings</button>
+                      </nav>
+                      <button className="btn-ghost sm logout-btn" onClick={() => { setUserProfile(null); showView('landing'); }}>← Log Out</button>
+                    </aside>
+
+                    {/* MAIN CONTENT AREA */}
+                    <main className="biz-main">
+                      <div className="biz-topbar">
+                        <h1 className="biz-page-title">Dashboard Overview</h1>
+                        <div className="biz-topbar-right">
+                          <button className="btn-primary sm" onClick={() => showView('view-store')}>👁 View My Store</button>
+                          
+                          {/* AVATAR TRIGGER FOR DRAWER */}
+                          <div 
+                            className="avatar" 
+                            onClick={() => setIsMenuOpen(true)} 
+                            style={{ cursor: 'pointer', zIndex: 999, position: 'relative' }}
+                          >
+                            {/* Priority: 1. Business Name, 2. Full Name, 3. Fallback "C" */}
+                            {(
+                              userProfile?.business_name?.charAt(0) || 
+                              userProfile?.full_name?.charAt(0) || 
+                              userProfile?.fullName?.charAt(0) || 
+                              "C"
+                            ).toUpperCase()}
                           </div>
 
-                          <div className="biz-dash-card full">
-                            <div className="biz-dash-card-title">📦 Inventory Status</div>
-                            <div className="low-stock-list">
-                              <p style={{textAlign: 'center', padding: '20px', color: 'var(--text-muted)'}}>No products found. Add products to track stock levels.</p>
-                            </div>
+                        </div>
+                      </div>
+
+                      <div className="biz-stats-row">
+                        <div className="biz-stat-card">
+                          <div className="bstat-icon">👁</div>
+                          <div className="bstat-val">0</div>
+                          <div className="bstat-lbl">Store Views</div>
+                        </div>
+                        <div className="biz-stat-card">
+                          <div className="bstat-icon">💬</div>
+                          <div className="bstat-val">0</div>
+                          <div className="bstat-lbl">Messages</div>
+                        </div>
+                        <div className="biz-stat-card">
+                          <div className="bstat-icon">📦</div>
+                          <div className="bstat-val">{stats.productCount}</div>
+                          <div className="bstat-lbl">Products Listed</div>
+                        </div>
+                        <div className="biz-stat-card">
+                          <div className="bstat-icon">❤️</div>
+                          <div className="bstat-val">0</div>
+                          <div className="bstat-lbl">Followers</div>
+                        </div>
+                      </div>
+
+                      <div className="biz-dash-grid">
+                        <div className="biz-dash-card">
+                          <div className="biz-dash-card-title">📢 Quick Post</div>
+                          <textarea placeholder={`What's new at ${userProfile?.business_name || 'the store'}?`} rows="3"></textarea>
+                          <div className="post-actions-row">
+                            <button className="icon-btn" title="Add Image">🖼</button>
+                            <button className="icon-btn" title="Add Video">🎬</button>
+                            <button className="btn-primary sm">Post</button>
                           </div>
+                        </div>
+
+                        <div className="biz-dash-card">
+                          <div className="biz-dash-card-title">🔔 Recent Activity</div>
+                          <div className="activity-list">
+                            <div className="activity-item">
+                              <span className="act-icon">✨</span>
+                              <span>Welcome to El-Mart, {userProfile?.fullName}!</span>
+                              <span className="act-time">Now</span>
+                            </div>
+                            {recentProducts && recentProducts.length > 0 ? (
+                              recentProducts.map((prod) => (
+                                <div className="activity-item" key={prod.id}>
+                                  <span className="act-icon">📦</span>
+                                  <span>You listed a new product: <b>{prod.name}</b></span>
+                                  <span className="act-time">Recent</span>
+                                </div>
+                              ))
+                            ) : (
+                              <p style={{fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '10px', textAlign: 'center'}}>
+                                No products listed yet.
+                              </p>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="biz-dash-card full">
+                          <div className="biz-dash-card-title">📦 Inventory Status</div>
+                          <div className="low-stock-list">
+                            <p style={{textAlign: 'center', padding: '20px', color: 'var(--text-muted)'}}>No products found.</p>
+                          </div>
+                        </div>
+                      </div>
+                    </main>
+
+                    {/* --- 3. MOBILE BOTTOM NAVIGATION --- */}
+                    <nav className="bottom-nav biz-bottom">
+                      <button 
+                        className={`bnav-btn ${view === 'business-dash' ? 'active' : ''}`} 
+                        onClick={() => showView('business-dash')}
+                      >
+                        📊<span>Dash</span>
+                      </button>
+                      
+                      <button 
+                        className={`bnav-btn ${view === 'biz-products' ? 'active' : ''}`} 
+                        onClick={() => showView('biz-products')}
+                      >
+                        📦<span>Products</span>
+                      </button>
+
+                      <button 
+                        className={`bnav-btn ${view === 'social-feed' ? 'active' : ''}`} 
+                        onClick={() => showView('social-feed')}
+                      >
+                        📱<span>Feed</span>
+                      </button>
+
+                      <button 
+                        className={`bnav-btn ${view === 'chat' || view === 'chat-open' ? 'active' : ''}`} 
+                        onClick={() => showView('chat')}
+                      >
+                        💬<span>Chat</span>
+                      </button>
+                    </nav>
+
+                  </div>
+                </div>
+              )}
+
+
+              {view === 'settings' && (
+                <div id="view-settings" className="view active">
+                  <div className="biz-shell">
+                    {/* 1. Sidebar remains for desktop */}
+                    <aside className="biz-sidebar">
+                      <div className="logo sm">El<span>Mart</span></div>
+                      <nav className="biz-nav">
+                        <button className="biz-nav-btn" onClick={() => showView('business-dash')}>📊 Dashboard</button>
+                        <button className="biz-nav-btn" onClick={() => showView('biz-store')}>🏪 My Store</button>
+                        <button className="biz-nav-btn" onClick={() => showView('biz-products')}>📦 Products</button>
+                        <button className="biz-nav-btn active">⚙️ Settings</button>
+                      </nav>
+                    </aside>
+
+                    <main className="biz-main">
+                      <div className="settings-container">
+                        <h1 className="biz-page-title">⚙️ Control Center</h1>
+                        
+                        <div className="settings-layout">
+                          {/* 2. Vertical Tabs for Settings Categories */}
+                          <nav className="settings-tabs">
+                            <button className={activeSettingTab === 'branding' ? 'active' : ''} onClick={() => setActiveSettingTab('branding')}>🏪 Branding</button>
+                            <button className={activeSettingTab === 'security' ? 'active' : ''} onClick={() => setActiveSettingTab('security')}>🔐 Security</button>
+                            <button className={activeSettingTab === 'ops' ? 'active' : ''} onClick={() => setActiveSettingTab('ops')}>⚙️ Operations</button>
+                            <button className={activeSettingTab === 'finance' ? 'active' : ''} onClick={() => setActiveSettingTab('finance')}>💰 Finance</button>
+                          </nav>
+
+                          {/* 3. Dynamic Content Area */}
+                          <div className="settings-content">
+                            {activeSettingTab === 'branding' && (
+                              <div className="settings-pane">
+                                <h3>Public Branding</h3>
+                                <div className="form-group">
+                                  <label>Business Name</label>
+                                  <input type="text" value={userProfile.business_name} onChange={(e) => setUserProfile({...userProfile, business_name: e.target.value})} />
+                                </div>
+                                <div className="form-group">
+                                  <label>Tagline</label>
+                                  <input type="text" value={userProfile.tagline} onChange={(e) => setUserProfile({...userProfile, tagline: e.target.value})} />
+                                </div>
+                                <button className="btn-primary" onClick={saveStoreSettings}>Save Branding</button>
+                              </div>
+                            )}
+
+                            {activeSettingTab === 'security' && (
+                              <div className="settings-pane">
+                                <h3>Account Security</h3>
+                                <div className="form-group">
+                                  <label>Current Password</label>
+                                  <input type="password" placeholder="••••••••" />
+                                </div>
+                                <div className="form-group">
+                                  <label>New Password</label>
+                                  <input type="password" placeholder="Min 8 characters" />
+                                </div>
+                                <button className="btn-primary">Update Password</button>
+                              </div>
+                            )}
+                            
+                            {/* Add 'ops' and 'finance' panes similarly */}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* 4. Bottom Nav for mobile */}
+                      <nav className="bottom-nav biz-bottom">
+                        <button className="bnav-btn" onClick={() => showView('business-dash')}>📊<span>Dash</span></button>
+                        <button className="bnav-btn active">⚙️<span>Settings</span></button>
+                      </nav>
+                    </main>
+                  </div>
+                </div>
+              )}
+
+             {/* THE NUCLEAR FIX - Check the string exactly! */}
+            
+
+                {view === 'newsletter' && (
+                  <div id="view-newsletter" className="view active" style={{display: 'block'}}>
+                    <div className="biz-shell">
+                      {/* 1. TOPBAR (Always show this first) */}
+                      <main className="biz-main" style={{marginLeft: 0, width: '100%'}}>
+                        <header className="biz-topbar">
+                          <button className="back-btn sm" onClick={() => showView('business-dash')}>←</button>
+                          <h1 className="biz-page-title">📧 Newsletter</h1>
+                        </header>
+
+                        {/* 2. THE CONTENT */}
+                        <div className="newsletter-stats">
+                          <div className="stat-card">
+                            <span className="stat-label">Subscribers</span>
+                            <span className="stat-value">{subscribers ? subscribers.length : 0}</span>
+                          </div>
+                        </div>
+
+                        <div className="subscriber-list">
+                          <h4>Active List</h4>
+                          {subscribers && subscribers.length > 0 ? (
+                            <div className="table-responsive">
+                              <table className="biz-table">
+                                <thead>
+                                  <tr><th>Email</th><th>Date</th></tr>
+                                </thead>
+                                <tbody>
+                                  {subscribers.map(sub => (
+                                    <tr key={sub.id}>
+                                      <td>{sub.email}</td>
+                                      <td>{sub.date ? new Date(sub.date).toLocaleDateString() : 'N/A'}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          ) : (
+                            <p className="empty-text">No subscribers yet. 200 OK received from server.</p>
+                          )}
+                        </div>
+
+                        <div className="campaign-box" style={{marginTop: '30px'}}>
+                          <h4>Create Update</h4>
+                          <textarea 
+                            rows="4" 
+                            value={campaignText || ""} 
+                            onChange={(e) => setCampaignText(e.target.value)}
+                            placeholder="Message..."
+                          ></textarea>
+                          <button className="btn-primary" onClick={sendCampaign}>Send Broadcast</button>
                         </div>
                       </main>
-
-                      <nav className="bottom-nav biz-bottom">
-                        <button 
-                          className={`bnav-btn ${view === 'business-dash' ? 'active' : ''}`} 
-                          onClick={() => showView('business-dash')}
-                        >
-                          📊<span>Dash</span>
-                        </button>
-                        
-                        <button 
-                          className={`bnav-btn ${view === 'biz-products' ? 'active' : ''}`} 
-                          onClick={() => showView('biz-products')}
-                        >
-                          📦<span>Products</span>
-                        </button>
-
-                        <button 
-                          className={`bnav-btn ${view === 'social-feed' ? 'active' : ''}`} 
-                          onClick={() => showView('social-feed')}
-                        >
-                          📱<span>Feed</span> {/* Updated to match your style */}
-                        </button>
-
-                        <button 
-                          className={`bnav-btn ${view === 'chat' || view === 'chat-open' ? 'active' : ''}`} 
-                          onClick={() => showView('chat')}
-                        >
-                          💬<span>Chat</span>
-                        </button>
-
-                        <button 
-                          className={`bnav-btn ${view === 'biz-store' ? 'active' : ''}`} 
-                          onClick={() => showView('biz-store')}
-                        >
-                          🏪<span>Store</span>
-                        </button>
-                      </nav>
-
                     </div>
                   </div>
                 )}
+
+
+
 
 
                 {/* ===================== VIEW STORE (PUBLIC PREVIEW) ===================== */}
@@ -1313,24 +1635,79 @@ return (
                       <div id="view-home" className="view active">
                         <div className="app-shell">
                           {/* 1. Header (Shared) */}
-                          <header className="app-header">
+                         <header className="app-header">
                             <div className="logo sm">El<span>Mart</span></div>
-                            <div className="search-bar">
-                              <input
-                                type="text"
-                                placeholder="Search products, stores, people..."
-                                onChange={(e) => handleSearch(e.target.value)} // Dynamic Search
-                              />
-                              <button className="search-btn">🔍</button>
-                            </div>
-                            <div className="header-actions">
-                              <button className="icon-btn" onClick={() => showView('chat')}>
-                                💬<span className="badge">3</span>
-                              </button>
-                              <button className="icon-btn">🔔</button>
-                              <div className="avatar" onClick={() => showView('landing')}>
-                                {userProfile.fullName ? userProfile.fullName.charAt(0) : 'U'}
+                            
+                            <div className="search-group">
+                              {/* 1. Main Text Search (Name or Product) */}
+                              <div className="search-bar">
+                                <input
+                                  type="text"
+                                  placeholder="What are you looking for?"
+                                  onChange={(e) => setSearchData({...searchData, q: e.target.value})}
+                                />
                               </div>
+
+                              {/* 2. Location Selector */}
+                              <div className="location-picker">
+                                <select onChange={(e) => setSearchData({...searchData, location: e.target.value})}>
+                                  <option value="">All Nigeria 🇳🇬</option>
+                                  <option value="Lagos">Lagos</option>
+                                  <option value="Abuja">Abuja</option>
+                                  <option value="Port Harcourt">Port Harcourt</option>
+                                  <option value="Kano">Kano</option>
+                                </select>
+                              </div>
+
+                              <button className="search-btn" onClick={handleMultiSearch}>🔍</button>
+                            </div>
+
+                            <div className="header-actions">
+                              {/* ... your existing chat/notif buttons ... */}
+                            </div>
+                          
+
+                            <div className="header-actions">
+                             {/* In your JSX */}
+                              <button className="icon-btn" onClick={() => showView('chat')}>
+                                💬
+                                {messages.filter(m => !m.is_read).length > 0 && (
+                                  <span className="badge">{messages.filter(m => !m.is_read).length}</span>
+                                )}
+                              </button>
+
+                           <div className="notification-wrapper" style={{ position: 'relative' }}>
+                                <button className="icon-btn" onClick={() => setIsNotifOpen(!isNotifOpen)}>
+                                  🔔
+                                  {/* Use ?.length to be safe! */}
+                                  {notifications?.length > 0 && <span className="badge">!</span>}
+                                </button>
+
+                                {isNotifOpen && (
+                                  <div className="notif-dropdown">
+                                    <h3>Notifications</h3>
+                                    {notifications?.length > 0 ? (
+                                      notifications.map(n => (
+                                        <div key={n.id} className="notif-item">
+                                          {n.text}
+                                        </div>
+                                      ))
+                                    ) : (
+                                      <p style={{fontSize: '0.8rem', color: '#888'}}>No new updates</p>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+
+
+                              <div 
+                                  className="avatar" 
+                                  onClick={() => setIsMenuOpen(true)} 
+                                  style={{ cursor: 'pointer' }}
+                                >
+                                  {userProfile?.full_name ? userProfile.full_name.charAt(0).toUpperCase() : 'U'}
+                             </div>
+
                             </div>
                           </header>
 
@@ -1348,39 +1725,51 @@ return (
                               <div className="section-title">📢 {role === 'business' ? 'Market Network' : 'Latest Posts'}</div>
                               
                               <div id="posts-feed">
-                                {/* Map through real posts from Django */}
                                 {posts.length > 0 ? posts.map(post => (
                                   <div className="post-card" key={post.id}>
                                     <div className="post-header">
-                                      <div className="post-biz-avatar">{post.biz_initials}</div>
+                                      {/* Using the initials logic we built */}
+                                      <div className="post-biz-avatar">{post.business_name.charAt(0).toUpperCase()}</div>
+                                      
                                       <div className="post-biz-info">
                                         <div className="post-biz-name" onClick={() => showView('view-store')}>
-                                          {post.biz_name}
+                                          {post.business_name}
+                                          {/* NEW: PRIORITY BADGE */}
+                                          {post.is_followed && <span className="following-badge">✅ Following</span>}
                                         </div>
-                                        <div className="post-biz-cat">{post.category} • {post.location}</div>
+                                        <div className="post-biz-cat">
+                                          {post.tagline || 'Business Partner'} • {post.location_state || 'Nigeria'}
+                                        </div>
                                       </div>
-                                      <div className="post-time">{post.time_ago}</div>
+                                      
+                                      {/* Dynamic timestamp from Django */}
+                                      <div className="post-time">
+                                        {new Date(post.timestamp).toLocaleDateString()}
+                                      </div>
                                     </div>
-                                    <div className="post-body">{post.content}</div>
+
+                                    <div className="post-body">
+                                      Check out our latest listing: <strong>{post.name}</strong>
+                                    </div>
                                     
-                                    {post.product && (
-                                      <div className="post-product-bar">
-                                        <span className="post-price">₦{post.product.price.toLocaleString()}</span>
-                                        <span className="post-stock in">In Stock</span>
-                                      </div>
-                                    )}
+                                    {/* Product Specific Info */}
+                                    <div className="post-product-bar">
+                                      <span className="post-price">₦{parseFloat(post.price).toLocaleString()}</span>
+                                      <span className="post-stock in">In Stock</span>
+                                    </div>
                                     
+                                    {/* Action Buttons */}
                                     <div className="post-actions-bar">
                                       <div className="post-action">❤️ Like</div>
-                                      {/* Business owners can reply to inquiries too */}
-                                      <div className="post-action" onClick={() => openChat(post.author)}>💬 Inquire</div>
+                                      <div className="post-action" onClick={() => openChat(post.business_id)}>💬 Inquire</div>
                                       <div className="post-action">🔗 Share</div>
                                     </div>
                                   </div>
                                 )) : (
-                                  <p className="empty-msg">No posts yet. Follow some businesses!</p>
+                                  <p className="empty-msg">Nothing to show yet. Try searching for products above!</p>
                                 )}
                               </div>
+
                             </div>
 
                             {/* 3. Sidebar (Visible on Desktop) */}

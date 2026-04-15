@@ -842,6 +842,490 @@ h1,h2,h3,.logo { font-family: 'Syne', sans-serif; }
   cursor: pointer;
   z-index: 10;
 }
+/* ==========================================
+   DESKTOP VIEW (Screens larger than 768px)
+   ========================================== */
+.biz-sidebar {
+  display: flex; 
+}
+
+.hamburger-btn, 
+.mobile-only-nav, 
+.biz-drawer {
+  display: none; 
+}
+
+.avatar {
+  cursor: default;
+}
+
+/* ==========================================
+   MOBILE VIEW (Screens 768px and smaller)
+   ========================================== */
+@media (max-width: 768px) {
+  
+  /* 1. Layout Fixes: Remove Desktop Sidebar */
+  .biz-sidebar {
+    display: none !important;
+  }
+
+  .biz-shell {
+    display: block; /* Overrides flex/grid so main content fills width */
+    width: 100%;
+  }
+
+  .biz-main {
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 15px;
+  }
+
+  /* 2. Topbar & Navigation Triggers */
+  .biz-topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    margin-bottom: 20px;
+  }
+
+  .avatar {
+    width: 42px;
+    height: 42px;
+    /* Gradient using your theme colors */
+    background: linear-gradient(45deg, #2575fc, #6a11cb, #ff8c00); 
+    background-size: 200% 200%;
+    animation: gradientShift 5s ease infinite;
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    box-shadow: 0 4px 10px rgba(106, 17, 203, 0.3);
+    border: 2px solid white;
+}
+
+@keyframes gradientShift {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+
+
+  /* 3. Mobile Specific Elements */
+  .mobile-only-nav {
+    display: flex; /* Shows bottom bar if you have one */
+  }
+
+  .hamburger-btn {
+    display: block;
+    position: absolute;
+    top: 15px;
+    left: 15px;
+  }
+
+  /* 4. The Slide-out Drawer */
+  /* Base state - hidden off to the left */
+/* The base drawer - parked off screen */
+  /* Glassmorphism Drawer Container */
+.biz-drawer {
+    position: fixed;
+    top: 0;
+    left: -110%; /* Extra buffer for the shadow */
+    width: 100%;
+    height: 100%;
+    display: flex;
+    z-index: 99999;
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    visibility: hidden;
+}
+
+.biz-drawer.open {
+    left: 0;
+    visibility: visible;
+}
+
+/* The Frosted Glass Panel */
+.drawer-content {
+    width: 300px;
+    height: 96%;
+    margin: 10px; /* Floating effect */
+    background: rgba(255, 255, 255, 0.85); /* Light glass */
+    backdrop-filter: blur(15px); /* Frosted effect */
+    -webkit-backdrop-filter: blur(15px);
+    border-radius: 24px; /* Modern rounded corners */
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    box-shadow: 10px 0 30px rgba(0, 0, 0, 0.1);
+    padding: 25px;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+}
+
+/* Header with Blue/Purple Gradient */
+.drawer-header {
+    background: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%); /* Purple to Blue */
+    padding: 20px;
+    border-radius: 18px;
+    color: white;
+    margin-bottom: 20px;
+    position: relative;
+}
+
+.close-drawer {
+    background: rgba(255, 255, 255, 0.2);
+    border: none;
+    color: white;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    cursor: pointer;
+}
+
+/* Buttons with Orange Accents */
+.drawer-nav button {
+    width: 100%;
+    padding: 14px 18px;
+    margin-bottom: 10px;
+    border: none;
+    border-radius: 12px;
+    background: transparent;
+    text-align: left;
+    font-size: 1rem;
+    font-weight: 500;
+    color: #333;
+    transition: 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.drawer-nav button:hover {
+    background: rgba(255, 165, 0, 0.1); /* Soft Orange background */
+    color: #ff8c00; /* Deep Orange text */
+    transform: translateX(5px);
+}
+
+.logout-btn-drawer {
+    margin-top: auto;
+    color: #ff4d4d !important;
+    border: 1px solid #ff4d4d33 !important;
+}
+
+/* Blurred Backdrop Overlay */
+.drawer-overlay {
+    flex: 1;
+    background: rgba(0, 0, 0, 0.2);
+    backdrop-filter: blur(4px);
+    cursor: pointer;
+}
+
+
+.biz-text-meta {
+    display: flex;
+    flex-direction: column;
+}
+
+/* Metallic/Bright CEO Name */
+.drawer-ceo-label {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #ffffff;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+    margin-bottom: 2px;
+}
+
+/* Orange Business Subtitle */
+.drawer-biz-name {
+    font-size: 0.8rem;
+    color: #ff9d00; 
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+  .avatar-big {
+    width: 50px;
+    height: 50px;
+    background: linear-gradient(135deg, #ff8c00, #ff4e50); /* Orange Gradient */
+    color: white;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    font-weight: bold;
+    margin-right: 15px;
+    box-shadow: 0 4px 10px rgba(255, 140, 0, 0.3);
+  }
+
+}
+
+.settings-layout {
+  display: flex;
+  gap: 30px;
+  background: var(--surface);
+  padding: 20px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  min-height: 500px;
+}
+
+.settings-tabs {
+  width: 200px;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--border);
+  padding-right: 20px;
+}
+
+.settings-tabs button {
+  padding: 12px 15px;
+  text-align: left;
+  background: none;
+  border: none;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: 8px;
+  margin-bottom: 5px;
+  transition: all 0.2s;
+}
+
+.settings-tabs button.active {
+  background: var(--orange-light);
+  color: var(--orange);
+}
+
+.settings-content {
+  flex: 1;
+}
+
+.settings-pane h3 {
+  margin-bottom: 20px;
+  color: var(--text-dark);
+}
+
+/* Mobile Settings Adjustment */
+@media (max-width: 768px) {
+  .settings-layout {
+    flex-direction: column;
+  }
+  .settings-tabs {
+    width: 100%;
+    flex-direction: row;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    overflow-x: auto;
+    padding-bottom: 10px;
+  }
+}
+
+/* Newsletter Pane Container */
+.newsletter-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 20px;
+  margin-bottom: 30px;
+}
+
+/* Stats Cards */
+.stat-card {
+  background: var(--orange-light);
+  padding: 20px;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  border: 1px solid rgba(255, 107, 53, 0.1);
+}
+
+.stat-label {
+  font-size: 0.8rem;
+  color: var(--orange);
+  font-weight: 700;
+  text-transform: uppercase;
+  margin-bottom: 5px;
+}
+
+.stat-value {
+  font-size: 2rem;
+  font-weight: 800;
+  color: var(--text-dark);
+}
+
+/* Subscriber Table */
+.subscriber-list {
+  background: white;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  padding: 20px;
+}
+
+.biz-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 15px;
+}
+
+.biz-table th {
+  text-align: left;
+  padding: 12px;
+  background: #f8f9fa;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  border-bottom: 2px solid var(--border);
+}
+
+.biz-table td {
+  padding: 15px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.9rem;
+}
+
+/* Campaign Box (Email Editor) */
+.campaign-box {
+  background: #fff8f5;
+  border: 1.5px dashed var(--orange);
+  padding: 25px;
+  border-radius: 15px;
+}
+
+.campaign-box h4 {
+  margin-bottom: 15px;
+  color: var(--text-dark);
+}
+
+.campaign-box textarea {
+  width: 100%;
+  padding: 15px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  font-family: 'Manrope', sans-serif;
+  resize: vertical;
+}
+
+/* Action Buttons */
+.btn-ghost.red {
+  color: #e63946;
+}
+.btn-ghost.red:hover {
+  background: #fff0f0;
+}
+
+.empty-text {
+  text-align: center;
+  padding: 40px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+
+.search-group {
+  display: flex;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 30px;
+  padding: 4px;
+  flex: 1;
+  max-width: 600px;
+  margin: 0 20px;
+  box-shadow: var(--shadow-sm);
+}
+
+.search-group .search-bar {
+  flex: 2;
+  border-right: 1px solid var(--border);
+}
+
+.search-group .search-bar input {
+  border: none;
+  width: 100%;
+  padding: 8px 15px;
+  background: transparent;
+}
+
+.location-picker {
+  flex: 1;
+}
+
+.location-picker select {
+  border: none;
+  background: transparent;
+  width: 100%;
+  padding: 8px 10px;
+  font-size: 0.85rem;
+  color: var(--text-dark);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.search-group .search-btn {
+  background: var(--orange);
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 36px;
+  height: 36px;
+  cursor: pointer;
+}
+
+
+.following-badge {
+  font-size: 0.65rem;
+  background: #e1f5fe;
+  color: #0288d1;
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-left: 8px;
+  font-weight: bold;
+  vertical-align: middle;
+}
+
+.notif-dropdown {
+  position: absolute;
+  top: 50px;
+  right: 0;
+  width: 280px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+  border: 1px solid var(--border);
+  padding: 15px;
+  z-index: 2000;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.notif-dropdown h3 {
+  font-size: 1rem;
+  margin-bottom: 15px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.notif-item {
+  padding: 10px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  margin-bottom: 8px;
+  transition: background 0.2s;
+}
+
+.notif-item.unread {
+  background: var(--orange-light);
+  color: var(--orange);
+  font-weight: 600;
+  border-left: 4px solid var(--orange);
+}
+
+.notif-item.read {
+  color: var(--text-muted);
+}
 
 /* ===================== CHAT ===================== */
 .chat-list { padding: 12px; }
