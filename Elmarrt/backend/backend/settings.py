@@ -30,7 +30,8 @@ SECRET_KEY = 'django-insecure-s4!9)&#f1prdv%r*1#)4662ci@cifv=*_%myhl6av^&%$wxx%i
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['elmart.onrender.com', 'localhost', '127.0.0.1']
+
 
 
 # Application definition
