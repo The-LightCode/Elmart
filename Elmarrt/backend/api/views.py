@@ -30,7 +30,7 @@ from .serializers import UserSerializer, ProductSerializer, MessageSerializer
 from django.db.models import Case, When, Value, IntegerField
 # api/views.py
 from .models import User, Product, Message, Subscriber  # <--- Add Subscriber here!
-
+import math
 from .serializers import ProductSerializer
 
 @api_view(['POST'])
@@ -101,15 +101,12 @@ def login_user(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_notifications(request):
-    # For now, we'll fetch 'Followers' as notifications
-    # Later, you can create a dedicated Notification model
-    new_followers = request.user.followers.all().order_by('-id')[:5]
-    
+    unread_count = Message.objects.filter(receiver=request.user, is_read=False).count()
     notifs = []
-    for f in new_followers:
+    if unread_count > 0:
         notifs.append({
-            "id": f.id,
-            "text": f"{f.username} started following you!",
+            "id": 1,
+            "text": f"You have {unread_count} unread message(s).",
             "is_read": False,
             "time": "Recent"
         })
@@ -195,35 +192,27 @@ def search_network(request):
 @permission_classes([IsAuthenticated])
 def get_posts(request):
     try:
-        me = request.user
-        followed_ids = me.following.values_list('id', flat=True)
-
-        # We mark followed posts with priority '1' and others with '2'
-        products = Product.objects.annotate(
-            priority=Case(
-                When(business__id__in=followed_ids, then=Value(1)),
-                default=Value(2),
-                output_field=IntegerField(),
-            )
-        ).order_by('priority', '-created_at') # Priority first, then newest
+        products = Product.objects.select_related('business').order_by('-created_at')
 
         feed_data = []
         for prod in products:
-            is_followed = prod.business.id in followed_ids
             feed_data.append({
                 "id": prod.id,
+                "business_id": prod.business.id,
                 "business_name": prod.business.business_name or prod.business.username,
-                "is_followed": is_followed, # React can use this to show a 'Following' badge
+                "location_state": prod.business.location_state,
+                "tagline": prod.business.tagline,
+                "is_followed": False,  # Placeholder until you add User.following
                 "name": prod.name,
                 "price": str(prod.price),
                 "image": prod.image.url if prod.image else None,
                 "timestamp": prod.created_at
             })
-        
+
         return Response(feed_data)
     except Exception as e:
         return Response({"error": str(e)}, status=500)
-
+    
 @api_view(['PATCH'])
 @permission_classes([IsAuthenticated])
 def update_business_profile(request):
@@ -362,33 +351,92 @@ class BusinessProductListView(generics.ListCreateAPIView):
     
 
 
+
+
+def haversine_distance(lat1, lon1, lat2, lon2):
+    """Returns distance in km between two GPS coordinates."""
+    R = 6371  # Earth radius in km
+    d_lat = math.radians(lat2 - lat1)
+    d_lon = math.radians(lon2 - lon1)
+    a = (math.sin(d_lat / 2) ** 2 +
+         math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) *
+         math.sin(d_lon / 2) ** 2)
+    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+
 class BusinessDiscoveryView(generics.ListAPIView):
-    serializer_class = UserSerializer
     permission_classes = [permissions.AllowAny]
 
-    def get_queryset(self):
-        # We start with all businesses
-        queryset = User.objects.filter(is_business=True).distinct()
-        
-        # Capture the three distinct search parameters
-        name_query = self.request.query_params.get('name', None)
-        location_query = self.request.query_params.get('location', None)
-        product_query = self.request.query_params.get('product', None)
+    def get(self, request, *args, **kwargs):
+        params = request.query_params
+        name_query     = params.get('name', '').strip()
+        location_query = params.get('location', '').strip()
+        product_query  = params.get('product', '').strip()
+        lat_param      = params.get('lat', None)
+        lng_param      = params.get('lng', None)
 
-        # 1. Search by Business Name
+        queryset = User.objects.filter(is_business=True).distinct()
+
+        # Filter by business name
         if name_query:
             queryset = queryset.filter(business_name__icontains=name_query)
-        
-        # 2. Search by Location (State/City)
+
+        # Filter by location state
         if location_query:
-            queryset = queryset.filter(location_state__iexact=location_query)
-            
-        # 3. Search by Product Name (Filtering businesses that own matching products)
+            queryset = queryset.filter(
+                Q(location_state__icontains=location_query)
+            )
+
+        # Filter by product name (businesses that sell matching products)
         if product_query:
-            # We filter Users who have a product in their 'products' related_name
             queryset = queryset.filter(products__name__icontains=product_query)
 
-        return queryset.order_by('business_name')
+        # Build result list
+        results = []
+        user_lat = float(lat_param) if lat_param else None
+        user_lng = float(lng_param) if lng_param else None
+
+        for biz in queryset:
+            # Get matched products for this business
+            if product_query:
+                matched = list(
+                    biz.products.filter(name__icontains=product_query)
+                    .values('name', 'price')[:3]
+                )
+            else:
+                matched = list(biz.products.values('name', 'price')[:3])
+
+            # Convert Decimal to str for JSON
+            for p in matched:
+                p['price'] = str(p['price'])
+
+            entry = {
+                'id':                biz.id,
+                'business_name':     biz.business_name or biz.username,
+                'business_category': biz.business_category,
+                'location_state':    biz.location_state,
+                'tagline':           biz.tagline,
+                'description':       biz.description,
+                'latitude':          str(biz.latitude) if biz.latitude else None,
+                'longitude':         str(biz.longitude) if biz.longitude else None,
+                'matched_products':  matched,
+                'distance_km':       None,
+            }
+
+            # Calculate proximity if user sent GPS coords AND business has coords
+            if user_lat and user_lng and biz.latitude and biz.longitude:
+                dist = haversine_distance(
+                    user_lat, user_lng,
+                    float(biz.latitude), float(biz.longitude)
+                )
+                entry['distance_km'] = round(dist, 1)
+
+            results.append(entry)
+
+        # Sort: businesses with a known distance come first, closest first
+        results.sort(key=lambda x: (x['distance_km'] is None, x['distance_km'] or 0))
+
+        return Response(results)
 
 
 

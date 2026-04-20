@@ -33,7 +33,7 @@ User = get_user_model()
 class BusinessProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ['business_name', 'tagline', 'description', 'business_category', 'location_state', 'phone_number']
+        fields = ['business_name', 'tagline', 'description', 'business_category', 'location_state', 'phone_number',  'latitude', 'longitude']
 
 class MessageSerializer(serializers.ModelSerializer):
     sender_email = serializers.ReadOnlyField(source='sender.email')
@@ -42,3 +42,24 @@ class MessageSerializer(serializers.ModelSerializer):
         model = Message
         fields = ['id', 'sender', 'sender_email', 'receiver', 'content', 'timestamp', 'is_read']
         read_only_fields = ['sender', 'timestamp']
+
+
+class BusinessDiscoverySerializer(serializers.ModelSerializer):
+    matched_products = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = [
+            'id', 'business_name', 'business_category',
+            'location_state', 'tagline', 'description',
+            'latitude', 'longitude', 'matched_products'
+        ]
+
+    def get_matched_products(self, obj):
+        # Pull the product query from the request context if available
+        product_query = self.context.get('product_query', None)
+        if product_query:
+            products = obj.products.filter(name__icontains=product_query)[:3]
+        else:
+            products = obj.products.all()[:3]
+        return [{'name': p.name, 'price': str(p.price)} for p in products]

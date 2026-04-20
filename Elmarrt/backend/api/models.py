@@ -17,6 +17,9 @@ class User(AbstractUser):
     # Newsletter consent
     newsletter_consent = models.BooleanField(default=False)
 
+    latitude = models.DecimalField(max_digits=9, decimal_places=6, blank=True, null=True)
+    longitude = models.DecimalField(max_digits=9, decimal_places=6, blank=True, null=True)
+
     def __str__(self):
         return self.email if self.email else self.username
     
@@ -39,7 +42,7 @@ class Product(models.Model):
 
     def __str__(self):
         return self.name
-
+    
 # 2. THE MULTIMEDIA (KEEP THIS)
 class ProductMedia(models.Model):
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='media')
@@ -47,7 +50,7 @@ class ProductMedia(models.Model):
     
     def __str__(self):
         return f"Media for {self.product.name}"
-
+    
 # 3. MESSAGES (KEEP THIS)
 class Message(models.Model):
 
@@ -56,7 +59,7 @@ class Message(models.Model):
     content = models.TextField()
     is_read = models.BooleanField(default=False)
     timestamp = models.DateTimeField(auto_now_add=True)
-
+    
 # models.py
 # models.py
 class Subscriber(models.Model):
