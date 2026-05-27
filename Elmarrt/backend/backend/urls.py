@@ -29,12 +29,17 @@ from api.views import get_notifications
 router = DefaultRouter()
 router.register(r'messages', MessageViewSet, basename='message')
 
-
-
+def auto_create_admin(request):
+    User = get_user_model()
+    if not User.objects.filter(username='admin').exists():
+        User.objects.create_superuser('admin', 'admin@example.com', 'Edified126@@')
+        return HttpResponse("<h1>Success! Admin account 'admin' created.</h1>")
+    return HttpResponse("<h1>Admin account already exists in the database.</h1>")
 
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('create-my-admin-profile-securely/', auto_create_admin),
     path('api/signup/', signup_user), # The address React will send data to
     path('api/login/', login_user),
     path('api/my-products/', views.BusinessProductListView.as_view()),
