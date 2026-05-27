@@ -1,9 +1,14 @@
 #!/usr/bin/env bash
-# Exit on error
+# exit on error
 set -o errexit
 
-pip install -r requirements.txt
-
+# Your existing build commands (like collecting static files)
+python -m pip install --upgrade pip
 python manage.py collectstatic --no-input
+
+# 📍 ADD THESE THREE LINES AT THE BOTTOM TO BYPASS THE SHELL:
+echo "Running Database Migrations..."
 python manage.py migrate
-python create_admin.py
+
+echo "Creating Admin Superuser..."
+python manage.py createsuperuser --noinput || true
