@@ -16,6 +16,8 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path
+from django.contrib.auth import get_user_model  # 📍 ADD THIS LINE
+from django.http import HttpResponse
 from api.views import signup_user
 from api.views import signup_user, login_user # Add login_user here
 from django.conf import settings
