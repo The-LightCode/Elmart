@@ -137,6 +137,10 @@ TIME_ZONE = 'UTC'
 
 USE_I18N = True
 
+SESSION_COOKIE_SECURE = True
+CSRF_COOKIE_SECURE = True
+
+
 USE_TZ = True
 
 
@@ -171,6 +175,8 @@ CORS_ALLOWED_ORIGINS = [
 
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:5173",
+    "https://elmart.onrender.com",
+
 ]
 
 CORS_ALLOW_HEADERS = [
@@ -181,6 +187,8 @@ CORS_ALLOW_HEADERS = [
     "x-csrftoken",
     "x-requested-with",
 ]
+
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 # Tell Django to use our custom user model
 AUTH_USER_MODEL = 'api.User'
