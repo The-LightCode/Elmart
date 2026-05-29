@@ -1,17 +1,18 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
 import './index.css';
 
 const API = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
 
-
 // ─── Tiny toast helper ───────────────────────────────────────────────────────
 function useToast() {
   const [toast, setToast] = useState({ msg: '', show: false });
-  const show = (msg) => {
+  const timer = useRef(null);
+  const show = useCallback((msg) => {
+    if (timer.current) clearTimeout(timer.current);
     setToast({ msg, show: true });
-    setTimeout(() => setToast({ msg: '', show: false }), 2800);
-  };
+    timer.current = setTimeout(() => setToast({ msg: '', show: false }), 2800);
+  }, []);
   return [toast, show];
 }
 
@@ -24,12 +25,19 @@ const NG_STATES = [
   'Taraba','Yobe','Zamfara'
 ];
 
+// ─── Loading spinner ─────────────────────────────────────────────────────────
+function Spinner({ size = 20 }) {
+  return (
+    <span className="spinner" style={{ width: size, height: size }} aria-label="Loading" />
+  );
+}
+
 export default function App() {
 
   // ── Navigation ─────────────────────────────────────────────────────────────
   const [view, setView]           = useState('landing');
   const [role, setRole]           = useState('customer');
-  const showView = (v) => { window.scrollTo(0,0); setView(v); };
+  const showView = useCallback((v) => { window.scrollTo(0, 0); setView(v); }, []);
 
   // ── Auth / Profile ──────────────────────────────────────────────────────────
   const [userProfile, setUserProfile] = useState(null);
@@ -37,19 +45,23 @@ export default function App() {
   const [showPassword, setShowPassword] = useState(false);
   const [oldPassword, setOldPassword]   = useState('');
   const [newPassword, setNewPassword]   = useState('');
+  const [authLoading, setAuthLoading]   = useState(false);
 
   // ── Dashboard ───────────────────────────────────────────────────────────────
   const [stats, setStats]           = useState({ productCount:0, viewCount:0, messageCount:0, followerCount:0 });
   const [recentProducts, setRecentProducts] = useState([]);
   const [quickPost, setQuickPost]   = useState('');
+  const [dashLoading, setDashLoading] = useState(false);
 
   // ── Products ────────────────────────────────────────────────────────────────
   const [productData, setProductData] = useState({ name:'', price:'', stock:'', category:'Electronics', description:'' });
   const [selectedMedia, setSelectedMedia] = useState([]);
   const [mediaPreviews, setMediaPreviews] = useState([]);
+  const [productLoading, setProductLoading] = useState(false);
 
   // ── Social feed ─────────────────────────────────────────────────────────────
   const [posts, setPosts]           = useState([]);
+  const [feedLoading, setFeedLoading] = useState(false);
   const [activeCatFilter, setActiveCatFilter] = useState('All');
 
   // ── Search / Explore ────────────────────────────────────────────────────────
@@ -58,28 +70,32 @@ export default function App() {
   const [stores, setStores]         = useState([]);
   const [userLocation, setUserLocation] = useState(null);
   const [isLocating, setIsLocating] = useState(false);
-  const [searchResults, setSearchResults] = useState([]);
+  const [searchLoading, setSearchLoading] = useState(false);
 
   // ── Chat ────────────────────────────────────────────────────────────────────
   const [chatList, setChatList]     = useState([]);
   const [activeChat, setActiveChat] = useState({ id:null, name:'', initials:'' });
   const [messages, setMessages]     = useState([]);
   const [chatInput, setChatInput]   = useState('');
+  const [chatLoading, setChatLoading] = useState(false);
   const chatEndRef                  = useRef(null);
 
   // ── Floating AI bot ─────────────────────────────────────────────────────────
   const [botOpen, setBotOpen]       = useState(false);
   const [botMessages, setBotMessages] = useState([{ sender:'bot', text:"Hi! I'm your El-Mart Advisor 🤖 Ask me if a price is fair or what to buy!" }]);
   const [botInput, setBotInput]     = useState('');
+  const [botLoading, setBotLoading] = useState(false);
   const botEndRef                   = useRef(null);
 
   // ── AI Advisor (sidebar) ────────────────────────────────────────────────────
   const [aiQuery, setAiQuery]       = useState('');
   const [aiResponse, setAiResponse] = useState('');
+  const [aiLoading, setAiLoading]   = useState(false);
 
   // ── Notifications ───────────────────────────────────────────────────────────
   const [notifications, setNotifications] = useState([]);
   const [isNotifOpen, setIsNotifOpen]     = useState(false);
+  const notifRef = useRef(null);
 
   // ── Newsletter ──────────────────────────────────────────────────────────────
   const [subscribers, setSubscribers] = useState([]);
@@ -90,10 +106,43 @@ export default function App() {
   const [activeSettingTab, setActiveSettingTab] = useState('branding');
   const [toast, showToast]            = useToast();
 
+  // ── Selected store for view-store ────────────────────────────────────────────
+  const [viewingStore, setViewingStore] = useState(null);
+
   // ── Derived helpers ─────────────────────────────────────────────────────────
   const token = () => localStorage.getItem('token');
   const authH = () => ({ headers: { Authorization: `Token ${token()}` } });
-  const avatarLetter = (userProfile?.business_name?.[0] || userProfile?.full_name?.[0] || userProfile?.username?.[0] || 'U').toUpperCase();
+  const avatarLetter = (userProfile?.business_name?.[0] || userProfile?.full_name?.[0] || userProfile?.fullName?.[0] || userProfile?.username?.[0] || 'U').toUpperCase();
+
+  // ══════════════════════════════════════════════════════════════════════
+  //  CLOSE NOTIFICATION DROPDOWN ON OUTSIDE CLICK
+  // ══════════════════════════════════════════════════════════════════════
+  useEffect(() => {
+    const handler = (e) => {
+      if (notifRef.current && !notifRef.current.contains(e.target)) {
+        setIsNotifOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  // ══════════════════════════════════════════════════════════════════════
+  //  RESTORE SESSION ON MOUNT
+  // ══════════════════════════════════════════════════════════════════════
+  useEffect(() => {
+    const savedToken = localStorage.getItem('token');
+    const savedRole = localStorage.getItem('role');
+    const savedProfile = localStorage.getItem('profile');
+    if (savedToken && savedProfile) {
+      try {
+        const profile = JSON.parse(savedProfile);
+        setUserProfile(profile);
+        setRole(savedRole || (profile.is_business ? 'business' : 'customer'));
+        showView(savedRole === 'business' ? 'business-dash' : 'customer-home');
+      } catch {}
+    }
+  }, []);
 
   // ══════════════════════════════════════════════════════════════════════
   //  DATA FETCHING
@@ -113,46 +162,71 @@ export default function App() {
   useEffect(() => { botEndRef.current?.scrollIntoView({ behavior:'smooth' }); }, [botMessages]);
 
   const fetchFeed = async () => {
+    setFeedLoading(true);
     try {
       const r = await axios.get(`${API}/api/posts/`, authH());
-      setPosts(r.data);
-    } catch { /* stay silent – demo mode shows empty state */ }
+      setPosts(Array.isArray(r.data) ? r.data : []);
+    } catch {
+      setPosts([]);
+    } finally {
+      setFeedLoading(false);
+    }
   };
 
   const fetchDashboard = async () => {
     if (!token()) return;
+    setDashLoading(true);
     try {
       const r = await axios.get(`${API}/api/my-products/`, authH());
-      setStats(s => ({ ...s, productCount: r.data.count || 0 }));
-      if (r.data.products) setRecentProducts(r.data.products);
+      const count = r.data.count ?? (Array.isArray(r.data.products) ? r.data.products.length : 0);
+      setStats(s => ({ ...s, productCount: count }));
+      if (Array.isArray(r.data.products)) setRecentProducts(r.data.products);
+      else if (Array.isArray(r.data)) setRecentProducts(r.data);
     } catch {}
+    finally { setDashLoading(false); }
   };
 
   const fetchChatList = async () => {
+    setChatLoading(true);
     try {
       const r = await axios.get(`${API}/api/messages/`, authH());
-      // API returns messages; group by contact
+      const msgs = Array.isArray(r.data) ? r.data : [];
       const seen = {};
-      r.data.forEach(m => {
-        const other = m.sender === userProfile?.id ? m.receiver : m.sender;
-        if (!seen[other]) seen[other] = { id: other, name: m.sender_email || `User ${other}`, last_message: m.content, unread_count: m.is_read ? 0 : 1 };
+      msgs.forEach(m => {
+        const isMe = m.sender === userProfile?.id;
+        const otherId = isMe ? m.receiver : m.sender;
+        const otherName = isMe ? `User ${m.receiver}` : (m.sender_email || `User ${m.sender}`);
+        if (!seen[otherId]) {
+          seen[otherId] = { id: otherId, name: otherName, last_message: m.content, unread_count: (!isMe && !m.is_read) ? 1 : 0, is_business: false };
+        } else if (!isMe && !m.is_read) {
+          seen[otherId].unread_count += 1;
+          seen[otherId].last_message = m.content;
+        }
       });
       setChatList(Object.values(seen));
-    } catch {}
+    } catch {
+      setChatList([]);
+    } finally {
+      setChatLoading(false);
+    }
   };
 
   const fetchNotifications = async () => {
     try {
       const r = await axios.get(`${API}/api/notifications/`, authH());
-      setNotifications(r.data);
-    } catch {}
+      setNotifications(Array.isArray(r.data) ? r.data : []);
+    } catch {
+      setNotifications([]);
+    }
   };
 
   const fetchSubscribers = async () => {
     try {
       const r = await axios.get(`${API}/api/newsletter/subscribers/`, authH());
-      setSubscribers(r.data);
-    } catch {}
+      setSubscribers(Array.isArray(r.data) ? r.data : []);
+    } catch {
+      setSubscribers([]);
+    }
   };
 
   // ══════════════════════════════════════════════════════════════════════
@@ -160,21 +234,33 @@ export default function App() {
   // ══════════════════════════════════════════════════════════════════════
 
   const handleLogin = async () => {
+    if (!formData.email || !formData.password) return showToast('Please enter your email and password.');
+    setAuthLoading(true);
     try {
       const r = await axios.post(`${API}/api/login/`, { email: formData.email, password: formData.password });
       const { user, token: tok } = r.data;
+      const profile = {
+        ...user,
+        full_name: user.fullName || user.full_name || '',
+        business_name: user.bizName || user.business_name || '',
+      };
       localStorage.setItem('token', tok);
       localStorage.setItem('role', user.role);
-      setUserProfile(user);
+      localStorage.setItem('profile', JSON.stringify(profile));
+      setUserProfile(profile);
       setRole(user.role);
       showView(user.role === 'business' ? 'business-dash' : 'customer-home');
     } catch (e) {
       showToast(e.response?.data?.error || 'Login failed. Check your credentials.');
+    } finally {
+      setAuthLoading(false);
     }
   };
 
   const handleSignup = async () => {
     if (!formData.email || !formData.password || !formData.fullName) return showToast('Please fill all required fields.');
+    if (formData.password.length < 8) return showToast('Password must be at least 8 characters.');
+    setAuthLoading(true);
     try {
       await axios.post(`${API}/api/signup/`, {
         email: formData.email, password: formData.password, fullName: formData.fullName,
@@ -185,6 +271,8 @@ export default function App() {
       showView('login');
     } catch (e) {
       showToast(e.response?.data?.error || 'Signup failed. Try again.');
+    } finally {
+      setAuthLoading(false);
     }
   };
 
@@ -192,14 +280,19 @@ export default function App() {
     localStorage.clear();
     setUserProfile(null);
     setPosts([]);
+    setRecentProducts([]);
+    setChatList([]);
+    setNotifications([]);
+    setStores([]);
     showView('landing');
   };
 
   const handleUpdatePassword = async () => {
     if (!oldPassword || !newPassword) return showToast('Fill both password fields.');
+    if (newPassword.length < 8) return showToast('New password must be at least 8 characters.');
     try {
       await axios.post(`${API}/api/change-password/`, { old_password: oldPassword, new_password: newPassword }, authH());
-      showToast('Password updated!');
+      showToast('Password updated successfully!');
       setOldPassword(''); setNewPassword('');
     } catch (e) {
       showToast(e.response?.data?.error || 'Failed to update password.');
@@ -223,6 +316,7 @@ export default function App() {
 
   const handleAddProduct = async () => {
     if (!productData.name || !productData.price) return showToast('Product name and price are required.');
+    setProductLoading(true);
     try {
       await axios.post(`${API}/api/my-products/`, {
         name: productData.name,
@@ -232,14 +326,17 @@ export default function App() {
       showToast('Product listed! 🚀');
       setProductData({ name:'', price:'', stock:'', category:'Electronics', description:'' });
       setSelectedMedia([]); setMediaPreviews([]);
+      fetchDashboard();
       showView('biz-inventory');
     } catch (e) {
       showToast(e.response?.data ? JSON.stringify(e.response.data) : 'Error listing product.');
+    } finally {
+      setProductLoading(false);
     }
   };
 
   const handleQuickPost = async () => {
-    if (!quickPost.trim()) return;
+    if (!quickPost.trim()) return showToast('Write something first!');
     showToast('Post published to your feed! 📢');
     setQuickPost('');
   };
@@ -253,13 +350,16 @@ export default function App() {
         description: userProfile.description,
         location_state: userProfile.location_state
       }, authH());
-      setUserProfile(r.data);
+      const updated = { ...userProfile, ...r.data };
+      setUserProfile(updated);
+      localStorage.setItem('profile', JSON.stringify(updated));
       showToast('Store settings saved!');
     } catch {
       showToast('Could not save settings. Check your connection.');
     }
   };
 
+  // ══════════════════════════════════════════════════════════════════════
   //  SEARCH / EXPLORE
   // ══════════════════════════════════════════════════════════════════════
 
@@ -271,18 +371,21 @@ export default function App() {
     if (searchMode !== 'location' && searchData.location) params.set('location', searchData.location);
     if (userLocation) { params.set('lat', userLocation.lat); params.set('lng', userLocation.lng); }
 
+    setSearchLoading(true);
     try {
       const r = await axios.get(`${API}/api/discover/?${params}`);
-      setStores(r.data);
+      setStores(Array.isArray(r.data) ? r.data : []);
       showView('explore');
     } catch {
-      // Demo fallback
+      // Fallback demo data so the UI never shows broken
       setStores([
         { id:1, business_name:'Lagos Tech Hub', business_category:'Electronics', location_state:'Lagos', tagline:'Best gadgets in town', distance_km:1.4, matched_products:[{name:'iPhone 14',price:'350000'}] },
         { id:2, business_name:'Kemi Fashion Closet', business_category:'Fashion', location_state:'Lagos', tagline:'Affordable luxury wear', distance_km:2.8, matched_products:[] },
         { id:3, business_name:'Mama Nkechi Groceries', business_category:'Food & Groceries', location_state:'Enugu', tagline:'Fresh daily from the farm', distance_km:4.1, matched_products:[{name:'Rice (50kg)',price:'65000'}] },
       ]);
       showView('explore');
+    } finally {
+      setSearchLoading(false);
     }
   };
 
@@ -302,7 +405,10 @@ export default function App() {
         setUserLocation({ lat: latitude, lng: longitude, label: 'Your Location' });
       }
       setIsLocating(false);
-    }, () => { setIsLocating(false); showToast("Could not get location. Select manually."); }, { timeout: 8000 });
+    }, () => {
+      setIsLocating(false);
+      showToast("Could not get location. Select manually.");
+    }, { timeout: 8000 });
   };
 
   // ══════════════════════════════════════════════════════════════════════
@@ -310,12 +416,18 @@ export default function App() {
   // ══════════════════════════════════════════════════════════════════════
 
   const openChat = async (contact) => {
-    setActiveChat({ id: contact.id, name: contact.name || contact.business_name || 'Unknown', initials: (contact.name || contact.business_name || 'U')[0] });
+    setActiveChat({
+      id: contact.id,
+      name: contact.name || contact.business_name || 'Unknown',
+      initials: (contact.name || contact.business_name || 'U')[0].toUpperCase()
+    });
     showView('chat-open');
     try {
       const r = await axios.get(`${API}/api/messages/`, { ...authH(), params: { contact: contact.id } });
-      setMessages(r.data);
-    } catch { setMessages([]); }
+      setMessages(Array.isArray(r.data) ? r.data : []);
+    } catch {
+      setMessages([]);
+    }
   };
 
   const sendMessage = async () => {
@@ -326,7 +438,10 @@ export default function App() {
     setChatInput('');
     try {
       await axios.post(`${API}/api/messages/`, { receiver: activeChat.id, content: text }, authH());
-    } catch { showToast('Message failed to send.'); }
+    } catch {
+      showToast('Message failed to send.');
+      setMessages(m => m.filter(msg => msg.id !== optimistic.id));
+    }
   };
 
   // ══════════════════════════════════════════════════════════════════════
@@ -335,11 +450,16 @@ export default function App() {
 
   const askAI = async () => {
     if (!aiQuery.trim()) return;
+    setAiLoading(true);
     setAiResponse('Thinking… 🤔');
     try {
       const r = await axios.post(`${API}/api/ai-advisor/`, { query: aiQuery });
       setAiResponse(r.data.reply);
-    } catch { setAiResponse("Can't reach the advisor right now. Try again!"); }
+    } catch {
+      setAiResponse("Can't reach the advisor right now. Try again!");
+    } finally {
+      setAiLoading(false);
+    }
   };
 
   const askBot = async () => {
@@ -347,11 +467,14 @@ export default function App() {
     const q = botInput;
     setBotMessages(m => [...m, { sender:'user', text: q }]);
     setBotInput('');
+    setBotLoading(true);
     try {
       const r = await axios.post(`${API}/api/ai-advisor/`, { query: q });
       setBotMessages(m => [...m, { sender:'bot', text: r.data.reply }]);
     } catch {
       setBotMessages(m => [...m, { sender:'bot', text: "Sorry, I'm offline right now. Try again shortly!" }]);
+    } finally {
+      setBotLoading(false);
     }
   };
 
@@ -362,10 +485,12 @@ export default function App() {
   const sendCampaign = async () => {
     if (!campaignText.trim()) return showToast('Write a message first.');
     try {
-      await axios.post(`${API}/api/newsletter/send/`, { message: campaignText }, authH());
-      showToast(`Broadcast sent to ${subscribers.length} subscribers!`);
+      const r = await axios.post(`${API}/api/newsletter/send/`, { message: campaignText }, authH());
+      showToast(`Broadcast sent to ${r.data.recipient_count ?? subscribers.length} subscribers!`);
       setCampaignText('');
-    } catch { showToast('Could not send campaign. Check connection.'); }
+    } catch {
+      showToast('Could not send campaign. Check connection.');
+    }
   };
 
   // ══════════════════════════════════════════════════════════════════════
@@ -376,8 +501,18 @@ export default function App() {
     try {
       const r = await axios.post(`${API}/api/follow/${bizId}/`, {}, authH());
       showToast(`${r.data.action === 'followed' ? '❤️ Following' : 'Unfollowed'} ${bizName}`);
-    } catch { showToast('Follow failed. Try again.'); }
+    } catch {
+      showToast('Follow failed. Try again.');
+    }
   };
+
+  // ══════════════════════════════════════════════════════════════════════
+  //  FILTERED POSTS
+  // ══════════════════════════════════════════════════════════════════════
+
+  const filteredPosts = activeCatFilter === 'All'
+    ? posts
+    : posts.filter(p => (p.business_category || p.category || '').toLowerCase().includes(activeCatFilter.toLowerCase()));
 
   // ══════════════════════════════════════════════════════════════════════
   //  SHARED UI COMPONENTS
@@ -389,7 +524,7 @@ export default function App() {
       <div className="logo sm">El<span>Mart</span></div>
       <div className="biz-welcome">
         <div className="biz-welcome-text">Welcome back,</div>
-        <div className="biz-ceo">{userProfile?.full_name || userProfile?.username || 'CEO'} 👑</div>
+        <div className="biz-ceo">{userProfile?.full_name || userProfile?.fullName || userProfile?.username || 'CEO'} 👑</div>
         <div className="biz-name-disp">{userProfile?.business_name || 'El-Mart Merchant'}</div>
       </div>
       <nav className="biz-nav">
@@ -404,7 +539,7 @@ export default function App() {
           { id:'settings',       icon:'⚙️', label:'Settings' },
         ].map(b => (
           <button key={b.id} className={`biz-nav-btn ${active === b.id ? 'active' : ''}`} onClick={() => showView(b.id)}>
-            {b.icon} {b.label}
+            <span className="nav-icon">{b.icon}</span> {b.label}
           </button>
         ))}
       </nav>
@@ -431,17 +566,17 @@ export default function App() {
 
   // Mobile drawer for business
   const BizDrawer = () => (
-    <div className={`biz-drawer ${isMenuOpen ? 'open' : ''}`}>
+    <div className={`biz-drawer ${isMenuOpen ? 'open' : ''}`} role="dialog" aria-modal="true">
       <div className="drawer-content">
         <div className="drawer-header">
           <div className="drawer-biz-info">
             <div className="avatar-big">{avatarLetter}</div>
             <div className="biz-text-meta">
-              <div className="drawer-ceo-label">{userProfile?.full_name || 'Owner'} 👑</div>
+              <div className="drawer-ceo-label">{userProfile?.full_name || userProfile?.fullName || 'Owner'} 👑</div>
               <div className="drawer-biz-name">{userProfile?.business_name || 'Your Store'}</div>
             </div>
           </div>
-          <button className="close-drawer" onClick={() => setIsMenuOpen(false)}>✕</button>
+          <button className="close-drawer" onClick={() => setIsMenuOpen(false)} aria-label="Close menu">✕</button>
         </div>
         <nav className="drawer-nav">
           {[
@@ -460,7 +595,7 @@ export default function App() {
           <button className="logout-btn-drawer" onClick={handleLogout}>← Log Out</button>
         </nav>
       </div>
-      <div className="drawer-overlay" onClick={() => setIsMenuOpen(false)} />
+      <div className="drawer-overlay" onClick={() => setIsMenuOpen(false)} aria-hidden="true" />
     </div>
   );
 
@@ -471,7 +606,7 @@ export default function App() {
   return (
     <>
       {/* ── GLOBAL TOAST ───────────────────────────────────────────── */}
-      <div className={`toast ${toast.show ? 'show' : ''}`}>{toast.msg}</div>
+      <div className={`toast ${toast.show ? 'show' : ''}`} role="status" aria-live="polite">{toast.msg}</div>
 
       <div id="app">
 
@@ -554,7 +689,7 @@ export default function App() {
                 <div className="form-group" style={{ position:'relative' }}>
                   <label>Password *</label>
                   <input type={showPassword ? 'text' : 'password'} value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} placeholder="Min. 8 characters" style={{ paddingRight:44 }} />
-                  <button type="button" className="pw-toggle" onClick={() => setShowPassword(p => !p)}>{showPassword ? '🙈' : '👁️'}</button>
+                  <button type="button" className="pw-toggle" onClick={() => setShowPassword(p => !p)} aria-label="Toggle password">{showPassword ? '🙈' : '👁️'}</button>
                 </div>
 
                 {role === 'business' && <>
@@ -590,7 +725,9 @@ export default function App() {
                   <label htmlFor="news-consent">I agree to receive email newsletters</label>
                 </div>
 
-                <button className="btn-primary full" onClick={handleSignup}>Create Account →</button>
+                <button className="btn-primary full" onClick={handleSignup} disabled={authLoading}>
+                  {authLoading ? <Spinner size={16} /> : 'Create Account →'}
+                </button>
                 <p className="auth-switch">Already have an account? <a href="#" onClick={e => { e.preventDefault(); showView('login'); }}>Log In</a></p>
               </div>
             </div>
@@ -611,22 +748,30 @@ export default function App() {
 
                 <div className="form-group">
                   <label>Email Address</label>
-                  <input type="email" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} placeholder="you@example.com" onKeyPress={e => e.key === 'Enter' && handleLogin()} />
+                  <input type="email" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} placeholder="you@example.com" onKeyDown={e => e.key === 'Enter' && handleLogin()} />
                 </div>
                 <div className="form-group" style={{ position:'relative' }}>
                   <label>Password</label>
-                  <input type={showPassword ? 'text' : 'password'} value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} placeholder="Your password" style={{ paddingRight:44 }} onKeyPress={e => e.key === 'Enter' && handleLogin()} />
-                  <button type="button" className="pw-toggle" onClick={() => setShowPassword(p => !p)}>{showPassword ? '🙈' : '👁️'}</button>
+                  <input type={showPassword ? 'text' : 'password'} value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} placeholder="Your password" style={{ paddingRight:44 }} onKeyDown={e => e.key === 'Enter' && handleLogin()} />
+                  <button type="button" className="pw-toggle" onClick={() => setShowPassword(p => !p)} aria-label="Toggle password">{showPassword ? '🙈' : '👁️'}</button>
                 </div>
 
-                <button className="btn-primary full" onClick={handleLogin}>Log In →</button>
+                <button className="btn-primary full" onClick={handleLogin} disabled={authLoading}>
+                  {authLoading ? <Spinner size={16} /> : 'Log In →'}
+                </button>
 
                 <div className="login-demos">
                   <p>Try a demo:</p>
-                  <button className="demo-btn" onClick={() => { setRole('customer'); setUserProfile({ id:99, full_name:'Demo Customer', username:'demo_customer', role:'customer' }); showView('customer-home'); }}>
+                  <button className="demo-btn" onClick={() => {
+                    const p = { id:99, full_name:'Demo Customer', username:'demo_customer', role:'customer' };
+                    setRole('customer'); setUserProfile(p); localStorage.setItem('role','customer'); localStorage.setItem('profile', JSON.stringify(p)); showView('customer-home');
+                  }}>
                     🛒 Demo Customer
                   </button>
-                  <button className="demo-btn" onClick={() => { setRole('business'); setUserProfile({ id:100, full_name:'Demo CEO', username:'democeo', business_name:'Demo Store', business_category:'Electronics', tagline:'Best store in town', location_state:'Lagos', role:'business' }); showView('business-dash'); }}>
+                  <button className="demo-btn" onClick={() => {
+                    const p = { id:100, full_name:'Demo CEO', username:'democeo', business_name:'Demo Store', business_category:'Electronics', tagline:'Best store in town', location_state:'Lagos', role:'business' };
+                    setRole('business'); setUserProfile(p); localStorage.setItem('role','business'); localStorage.setItem('profile', JSON.stringify(p)); showView('business-dash');
+                  }}>
                     🏪 Demo Business
                   </button>
                 </div>
@@ -639,7 +784,7 @@ export default function App() {
         {/* ═══════════════════════════════════════════════════════════
             BUSINESS DASHBOARD
         ═══════════════════════════════════════════════════════════ */}
-        {view === 'business-dash' && (
+        {view === 'business-dash' && userProfile && (
           <div className="view active">
             <BizDrawer />
             <div className="biz-shell">
@@ -648,88 +793,96 @@ export default function App() {
                 <div className="biz-topbar">
                   <div>
                     <div className="biz-page-title">Dashboard Overview</div>
-                    <div style={{ fontSize:'0.78rem', color:'var(--text-muted)', marginTop:2 }}>Good to see you, {userProfile?.full_name?.split(' ')[0] || 'CEO'} 👋</div>
+                    <div style={{ fontSize:'0.78rem', color:'var(--text-muted)', marginTop:2 }}>
+                      Good to see you, {userProfile?.full_name?.split(' ')[0] || userProfile?.fullName?.split(' ')[0] || 'CEO'} 👋
+                    </div>
                   </div>
                   <div className="biz-topbar-right">
                     <button className="btn-primary sm" onClick={() => showView('biz-products')}>+ Add Product</button>
-                    <div className="avatar" onClick={() => setIsMenuOpen(true)}>{avatarLetter}</div>
+                    <div className="avatar" onClick={() => setIsMenuOpen(true)} title="Open menu" role="button" tabIndex={0} onKeyDown={e => e.key === 'Enter' && setIsMenuOpen(true)}>{avatarLetter}</div>
                   </div>
                 </div>
 
-                <div className="biz-stats-row">
-                  {[
-                    { icon:'📦', val: stats.productCount, lbl:'Products Listed' },
-                    { icon:'👁',  val: stats.viewCount || 0, lbl:'Store Views' },
-                    { icon:'💬', val: stats.messageCount || 0, lbl:'Messages' },
-                    { icon:'❤️', val: stats.followerCount || 0, lbl:'Followers' },
-                  ].map(s => (
-                    <div className="biz-stat-card" key={s.lbl}>
-                      <div className="bstat-icon">{s.icon}</div>
-                      <div className="bstat-val">{s.val}</div>
-                      <div className="bstat-lbl">{s.lbl}</div>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="biz-dash-grid">
-                  {/* Quick Post */}
-                  <div className="biz-dash-card">
-                    <div className="biz-dash-card-title">📢 Quick Post</div>
-                    <textarea
-                      rows="3"
-                      placeholder={`What's new at ${userProfile?.business_name || 'the store'}? Share a product update…`}
-                      value={quickPost}
-                      onChange={e => setQuickPost(e.target.value)}
-                    />
-                    <div className="post-actions-row">
-                      <button className="icon-btn" title="Add Image" onClick={() => showToast('Image upload coming soon!')}>🖼</button>
-                      <button className="icon-btn" title="Add Video" onClick={() => showToast('Video upload coming soon!')}>🎬</button>
-                      <button className="btn-primary sm" onClick={handleQuickPost}>Post Now</button>
-                    </div>
-                  </div>
-
-                  {/* Recent Activity */}
-                  <div className="biz-dash-card">
-                    <div className="biz-dash-card-title">🔔 Recent Activity</div>
-                    <div className="activity-list">
-                      {recentProducts.length > 0 ? recentProducts.slice(0,4).map(p => (
-                        <div className="activity-item" key={p.id}>
-                          <span className="act-icon">📦</span>
-                          <span>Listed <b>{p.name}</b> — ₦{Number(p.price).toLocaleString()}</span>
-                          <span className="act-time">Recent</span>
+                {dashLoading ? (
+                  <div className="dash-loading"><Spinner size={32} /></div>
+                ) : (
+                  <>
+                    <div className="biz-stats-row">
+                      {[
+                        { icon:'📦', val: stats.productCount, lbl:'Products Listed' },
+                        { icon:'👁',  val: stats.viewCount || 0, lbl:'Store Views' },
+                        { icon:'💬', val: stats.messageCount || 0, lbl:'Messages' },
+                        { icon:'❤️', val: stats.followerCount || 0, lbl:'Followers' },
+                      ].map(s => (
+                        <div className="biz-stat-card" key={s.lbl}>
+                          <div className="bstat-icon">{s.icon}</div>
+                          <div className="bstat-val">{s.val}</div>
+                          <div className="bstat-lbl">{s.lbl}</div>
                         </div>
-                      )) : (
-                        <div style={{ color:'var(--text-muted)', fontSize:'0.83rem', textAlign:'center', padding:'20px 0' }}>
-                          No activity yet.<br />
-                          <button className="btn-primary sm" style={{ marginTop:10 }} onClick={() => showView('biz-products')}>List your first product →</button>
-                        </div>
-                      )}
+                      ))}
                     </div>
-                  </div>
 
-                  {/* Inventory Snapshot */}
-                  <div className="biz-dash-card full">
-                    <div className="biz-dash-card-title" style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                      <span>📦 Inventory Snapshot</span>
-                      <button className="btn-ghost xs" onClick={() => showView('biz-inventory')}>View All</button>
-                    </div>
-                    {recentProducts.length > 0 ? (
-                      <div className="low-stock-list">
-                        {recentProducts.slice(0,5).map(p => (
-                          <div className="low-stock-item" key={p.id}>
-                            <span><b>{p.name}</b></span>
-                            <span style={{ color:'var(--text-muted)', fontSize:'0.82rem' }}>₦{Number(p.price).toLocaleString()}</span>
-                            <span className={`stock-count ${p.stock <= 0 ? 'danger' : p.stock < 5 ? 'warn' : 'good'}`}>
-                              {p.stock <= 0 ? 'Out of stock' : `${p.stock} in stock`}
-                            </span>
-                          </div>
-                        ))}
+                    <div className="biz-dash-grid">
+                      {/* Quick Post */}
+                      <div className="biz-dash-card">
+                        <div className="biz-dash-card-title">📢 Quick Post</div>
+                        <textarea
+                          rows="3"
+                          placeholder={`What's new at ${userProfile?.business_name || 'the store'}? Share a product update…`}
+                          value={quickPost}
+                          onChange={e => setQuickPost(e.target.value)}
+                        />
+                        <div className="post-actions-row">
+                          <button className="icon-btn" title="Add Image" onClick={() => showToast('Image upload coming soon!')}>🖼</button>
+                          <button className="icon-btn" title="Add Video" onClick={() => showToast('Video upload coming soon!')}>🎬</button>
+                          <button className="btn-primary sm" onClick={handleQuickPost}>Post Now</button>
+                        </div>
                       </div>
-                    ) : (
-                      <p style={{ color:'var(--text-muted)', fontSize:'0.83rem', textAlign:'center', padding:'20px 0' }}>No products yet.</p>
-                    )}
-                  </div>
-                </div>
+
+                      {/* Recent Activity */}
+                      <div className="biz-dash-card">
+                        <div className="biz-dash-card-title">🔔 Recent Activity</div>
+                        <div className="activity-list">
+                          {recentProducts.length > 0 ? recentProducts.slice(0,4).map(p => (
+                            <div className="activity-item" key={p.id}>
+                              <span className="act-icon">📦</span>
+                              <span>Listed <b>{p.name}</b> — ₦{Number(p.price).toLocaleString()}</span>
+                              <span className="act-time">Recent</span>
+                            </div>
+                          )) : (
+                            <div style={{ color:'var(--text-muted)', fontSize:'0.83rem', textAlign:'center', padding:'20px 0' }}>
+                              No activity yet.<br />
+                              <button className="btn-primary sm" style={{ marginTop:10 }} onClick={() => showView('biz-products')}>List your first product →</button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Inventory Snapshot */}
+                      <div className="biz-dash-card full">
+                        <div className="biz-dash-card-title" style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                          <span>📦 Inventory Snapshot</span>
+                          <button className="btn-ghost xs" onClick={() => showView('biz-inventory')}>View All</button>
+                        </div>
+                        {recentProducts.length > 0 ? (
+                          <div className="low-stock-list">
+                            {recentProducts.slice(0,5).map(p => (
+                              <div className="low-stock-item" key={p.id}>
+                                <span><b>{p.name}</b></span>
+                                <span style={{ color:'var(--text-muted)', fontSize:'0.82rem' }}>₦{Number(p.price).toLocaleString()}</span>
+                                <span className={`stock-count ${p.stock <= 0 ? 'danger' : p.stock < 5 ? 'warn' : 'good'}`}>
+                                  {p.stock <= 0 ? 'Out of stock' : `${p.stock} in stock`}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p style={{ color:'var(--text-muted)', fontSize:'0.83rem', textAlign:'center', padding:'20px 0' }}>No products yet.</p>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
 
                 <BizBottomNav active="business-dash" />
               </main>
@@ -740,7 +893,7 @@ export default function App() {
         {/* ═══════════════════════════════════════════════════════════
             BIZ: ADD PRODUCT
         ═══════════════════════════════════════════════════════════ */}
-        {view === 'biz-products' && (
+        {view === 'biz-products' && userProfile && (
           <div className="view active">
             <BizDrawer />
             <div className="biz-shell">
@@ -750,7 +903,7 @@ export default function App() {
                   <div className="biz-page-title">➕ Add New Product</div>
                   <div className="biz-topbar-right">
                     <button className="btn-ghost sm" onClick={() => showView('biz-inventory')}>View Inventory</button>
-                    <div className="avatar" onClick={() => setIsMenuOpen(true)}>{avatarLetter}</div>
+                    <div className="avatar" onClick={() => setIsMenuOpen(true)} role="button" tabIndex={0}>{avatarLetter}</div>
                   </div>
                 </div>
 
@@ -785,7 +938,7 @@ export default function App() {
 
                   <div className="form-group">
                     <label>Product Photos / Video</label>
-                    <div className="media-upload-zone" onClick={() => document.getElementById('media-input').click()}>
+                    <div className="media-upload-zone" onClick={() => document.getElementById('media-input').click()} role="button" tabIndex={0} onKeyDown={e => e.key === 'Enter' && document.getElementById('media-input').click()}>
                       <div className="upload-icon">📸</div>
                       <p>Click to upload images or video</p>
                       <input type="file" id="media-input" hidden multiple accept="image/*,video/*" onChange={handleMediaChange} />
@@ -794,15 +947,17 @@ export default function App() {
                       <div className="media-preview-grid">
                         {mediaPreviews.map((url, i) => (
                           <div className="preview-card" key={i}>
-                            <img src={url} alt="preview" />
-                            <button type="button" className="remove-btn" onClick={() => removeMedia(i)}>×</button>
+                            <img src={url} alt={`preview ${i+1}`} />
+                            <button type="button" className="remove-btn" onClick={() => removeMedia(i)} aria-label="Remove image">×</button>
                           </div>
                         ))}
                       </div>
                     )}
                   </div>
 
-                  <button className="btn-primary full" onClick={handleAddProduct}>🚀 List Product</button>
+                  <button className="btn-primary full" onClick={handleAddProduct} disabled={productLoading}>
+                    {productLoading ? <Spinner size={16} /> : '🚀 List Product'}
+                  </button>
                 </div>
 
                 <BizBottomNav active="biz-products" />
@@ -814,7 +969,7 @@ export default function App() {
         {/* ═══════════════════════════════════════════════════════════
             BIZ: INVENTORY
         ═══════════════════════════════════════════════════════════ */}
-        {view === 'biz-inventory' && (
+        {view === 'biz-inventory' && userProfile && (
           <div className="view active">
             <BizDrawer />
             <div className="biz-shell">
@@ -824,12 +979,14 @@ export default function App() {
                   <div className="biz-page-title">🗂 Products & Inventory</div>
                   <div className="biz-topbar-right">
                     <button className="btn-primary sm" onClick={() => showView('biz-products')}>+ Add Product</button>
-                    <div className="avatar" onClick={() => setIsMenuOpen(true)}>{avatarLetter}</div>
+                    <div className="avatar" onClick={() => setIsMenuOpen(true)} role="button" tabIndex={0}>{avatarLetter}</div>
                   </div>
                 </div>
 
                 <div className="products-table-wrap">
-                  {recentProducts.length > 0 ? (
+                  {dashLoading ? (
+                    <div className="dash-loading"><Spinner size={32} /></div>
+                  ) : recentProducts.length > 0 ? (
                     <table className="products-table">
                       <thead>
                         <tr>
@@ -885,9 +1042,9 @@ export default function App() {
                 <div className="biz-topbar">
                   <div className="biz-page-title">🏪 Store Customiser</div>
                   <div className="biz-topbar-right">
-                    <button className="btn-ghost sm" onClick={() => showView('view-store')}>👁 Preview</button>
+                    <button className="btn-ghost sm" onClick={() => { setViewingStore(userProfile); showView('view-store'); }}>👁 Preview</button>
                     <button className="btn-primary sm" onClick={saveStoreSettings}>Save</button>
-                    <div className="avatar" onClick={() => setIsMenuOpen(true)}>{avatarLetter}</div>
+                    <div className="avatar" onClick={() => setIsMenuOpen(true)} role="button" tabIndex={0}>{avatarLetter}</div>
                   </div>
                 </div>
 
@@ -962,7 +1119,7 @@ export default function App() {
                 <div className="biz-topbar">
                   <div className="biz-page-title">⚙️ Settings</div>
                   <div className="biz-topbar-right">
-                    <div className="avatar" onClick={() => setIsMenuOpen(true)}>{avatarLetter}</div>
+                    <div className="avatar" onClick={() => setIsMenuOpen(true)} role="button" tabIndex={0}>{avatarLetter}</div>
                   </div>
                 </div>
 
@@ -1027,7 +1184,7 @@ export default function App() {
         {/* ═══════════════════════════════════════════════════════════
             NEWSLETTER
         ═══════════════════════════════════════════════════════════ */}
-        {view === 'newsletter' && (
+        {view === 'newsletter' && userProfile && (
           <div className="view active">
             <BizDrawer />
             <div className="biz-shell">
@@ -1036,7 +1193,7 @@ export default function App() {
                 <div className="biz-topbar">
                   <div className="biz-page-title">📧 Newsletter</div>
                   <div className="biz-topbar-right">
-                    <div className="avatar" onClick={() => setIsMenuOpen(true)}>{avatarLetter}</div>
+                    <div className="avatar" onClick={() => setIsMenuOpen(true)} role="button" tabIndex={0}>{avatarLetter}</div>
                   </div>
                 </div>
 
@@ -1092,51 +1249,79 @@ export default function App() {
         ═══════════════════════════════════════════════════════════ */}
         {view === 'view-store' && (
           <div className="view active" style={{ minHeight:'100vh', background:'var(--bg)', paddingBottom:80 }}>
-            <div style={{ position:'relative' }}>
-              <div className="store-hero">
-                <div className="store-hero-overlay" />
-                <button className="store-back-btn" onClick={() => showView(role === 'business' ? 'business-dash' : 'customer-home')}>← Back</button>
-                <div className="store-hero-content">
-                  <div className="store-logo-big">{(userProfile?.business_name || 'B')[0]?.toUpperCase()}</div>
-                  <div>
-                    <div className="store-hero-name">{userProfile?.business_name || 'Business Store'}</div>
-                    <div className="store-hero-cat">{userProfile?.business_category || 'General'} · {userProfile?.location_state || 'Nigeria'}</div>
-                  </div>
-                </div>
-              </div>
-            </div>
+            {/* Determine which store to show: a discovered store or own profile */}
+            {(() => {
+              const storeData = viewingStore || userProfile;
+              const storeName = storeData?.business_name || 'Business Store';
+              const storeCat  = storeData?.business_category || 'General';
+              const stateLoc  = storeData?.location_state || 'Nigeria';
+              const storeDesc = storeData?.description || '';
+              const storeTag  = storeData?.tagline || '';
+              const storeProducts = viewingStore?.matched_products || recentProducts;
 
-            <div className="store-action-bar">
-              <button className="btn-primary sm" onClick={() => openChat({ id: userProfile?.id, name: userProfile?.business_name })}>💬 Chat</button>
-              <button className="btn-ghost sm" onClick={() => { if(userProfile?.id) handleFollow(userProfile.id, userProfile.business_name); }}>❤️ Follow</button>
-              <button className="btn-ghost sm" onClick={() => { navigator.share?.({ title: userProfile?.business_name, url: window.location.href }) || showToast('Copy the URL to share!'); }}>🔗 Share</button>
-            </div>
-
-            <div className="store-content">
-              {userProfile?.tagline && <p style={{ fontWeight:700, fontSize:'1rem', color:'var(--navy)', marginBottom:8 }}>"{userProfile.tagline}"</p>}
-              {userProfile?.description && <p className="store-about-text">{userProfile.description}</p>}
-
-              <div className="section-title" style={{ marginBottom:12 }}>📦 Products</div>
-              {recentProducts.length > 0 ? (
-                <div className="store-products-grid">
-                  {recentProducts.map(p => (
-                    <div className="product-mini-card" key={p.id}>
-                      <div className="product-mini-img">📦</div>
-                      <div className="product-mini-body">
-                        <div className="product-mini-name">{p.name}</div>
-                        <div className="product-mini-price">₦{Number(p.price).toLocaleString()}</div>
-                        <div className={`product-mini-stock ${p.stock > 0 ? 'in' : 'out'}`}>{p.stock > 0 ? `${p.stock} in stock` : 'Out of stock'}</div>
+              return (
+                <>
+                  <div style={{ position:'relative' }}>
+                    <div className="store-hero">
+                      <div className="store-hero-overlay" />
+                      <button className="store-back-btn" onClick={() => {
+                        setViewingStore(null);
+                        showView(role === 'business' ? 'biz-store' : 'explore');
+                      }}>← Back</button>
+                      <div className="store-hero-content">
+                        <div className="store-logo-big">{storeName[0]?.toUpperCase()}</div>
+                        <div>
+                          <div className="store-hero-name">{storeName}</div>
+                          <div className="store-hero-cat">{storeCat} · {stateLoc}</div>
+                        </div>
                       </div>
                     </div>
-                  ))}
-                </div>
-              ) : (
-                <p style={{ color:'var(--text-muted)', textAlign:'center', padding:'40px 0' }}>
-                  No products yet.
-                  {role === 'business' && <><br /><button className="btn-primary sm" style={{ marginTop:10 }} onClick={() => showView('biz-products')}>Add Products →</button></>}
-                </p>
-              )}
-            </div>
+                  </div>
+
+                  <div className="store-action-bar">
+                    <button className="btn-primary sm" onClick={() => openChat({ id: storeData?.id, name: storeName })}>💬 Chat</button>
+                    <button className="btn-ghost sm" onClick={() => storeData?.id && handleFollow(storeData.id, storeName)}>❤️ Follow</button>
+                    <button className="btn-ghost sm" onClick={() => {
+                      navigator.share?.({ title: storeName, url: window.location.href }) || showToast('Copy the URL to share!');
+                    }}>🔗 Share</button>
+                  </div>
+
+                  <div className="store-content">
+                    {storeTag && <p style={{ fontWeight:700, fontSize:'1rem', color:'var(--navy)', marginBottom:8 }}>"{storeTag}"</p>}
+                    {storeDesc && <p className="store-about-text">{storeDesc}</p>}
+
+                    <div className="section-title" style={{ marginBottom:12 }}>📦 Products</div>
+                    {storeProducts.length > 0 ? (
+                      <div className="store-products-grid">
+                        {storeProducts.map((p, i) => (
+                          <div className="product-mini-card" key={p.id || i}>
+                            <div className="product-mini-img">
+                              {p.image ? <img src={`${API}${p.image}`} alt={p.name} style={{ width:'100%', height:'100%', objectFit:'cover' }} /> : '📦'}
+                            </div>
+                            <div className="product-mini-body">
+                              <div className="product-mini-name">{p.name}</div>
+                              <div className="product-mini-price">₦{Number(p.price).toLocaleString()}</div>
+                              {p.stock !== undefined && (
+                                <div className={`product-mini-stock ${p.stock > 0 ? 'in' : 'out'}`}>
+                                  {p.stock > 0 ? `${p.stock} in stock` : 'Out of stock'}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p style={{ color:'var(--text-muted)', textAlign:'center', padding:'40px 0' }}>
+                        No products yet.
+                        {role === 'business' && !viewingStore && (
+                          <><br /><button className="btn-primary sm" style={{ marginTop:10 }} onClick={() => showView('biz-products')}>Add Products →</button></>
+                        )}
+                      </p>
+                    )}
+                  </div>
+                </>
+              );
+            })()}
           </div>
         )}
 
@@ -1168,7 +1353,8 @@ export default function App() {
                           else if (searchMode === 'business') setSearchData(d => ({...d, name: e.target.value}));
                           else setSearchData(d => ({...d, location: e.target.value}));
                         }}
-                        onKeyPress={e => e.key === 'Enter' && handleMultiSearch()}
+                        onKeyDown={e => e.key === 'Enter' && handleMultiSearch()}
+                        aria-label="Search"
                       />
                     </div>
                     {searchMode !== 'location' && (
@@ -1177,27 +1363,29 @@ export default function App() {
                         {NG_STATES.map(s => <option key={s}>{s}</option>)}
                       </select>
                     )}
-                    <button className="gps-btn" title="Use my location" onClick={handleGetLocation} disabled={isLocating}>
+                    <button className="gps-btn" title="Use my location" onClick={handleGetLocation} disabled={isLocating} aria-label="Use my location">
                       {isLocating ? '⏳' : userLocation ? '✅' : '📡'}
                     </button>
-                    <button className="search-btn" onClick={handleMultiSearch}>🔍</button>
+                    <button className="search-btn" onClick={handleMultiSearch} aria-label="Search">🔍</button>
                   </div>
                   {userLocation && (
                     <div className="location-label">
                       📍 Near <strong>{userLocation.label}</strong>
-                      <button onClick={() => { setUserLocation(null); setSearchData(d => ({...d, location: ''})); }} className="clear-loc">✕</button>
+                      <button onClick={() => { setUserLocation(null); setSearchData(d => ({...d, location: ''})); }} className="clear-loc" aria-label="Clear location">✕</button>
                     </div>
                   )}
                 </div>
 
                 {/* Header actions */}
                 <div className="header-actions">
-                  <button className="icon-btn" onClick={() => showView('chat')} title="Messages">
+                  <button className="icon-btn" onClick={() => showView('chat')} title="Messages" aria-label="Messages">
                     💬
-                    {messages.filter(m => m.is_read === false).length > 0 && <span className="badge">{messages.filter(m => !m.is_read).length}</span>}
+                    {chatList.reduce((acc, c) => acc + (c.unread_count || 0), 0) > 0 && (
+                      <span className="badge">{chatList.reduce((acc, c) => acc + (c.unread_count || 0), 0)}</span>
+                    )}
                   </button>
-                  <div className="notification-wrapper">
-                    <button className="icon-btn" onClick={() => setIsNotifOpen(p => !p)} title="Notifications">
+                  <div className="notification-wrapper" ref={notifRef}>
+                    <button className="icon-btn" onClick={() => setIsNotifOpen(p => !p)} title="Notifications" aria-label="Notifications">
                       🔔
                       {notifications.length > 0 && <span className="badge">{notifications.length}</span>}
                     </button>
@@ -1210,48 +1398,66 @@ export default function App() {
                       </div>
                     )}
                   </div>
-                  <div className="avatar" onClick={() => role === 'business' ? setIsMenuOpen(true) : showToast('Profile coming soon!')}>
-                    {userProfile?.full_name?.[0]?.toUpperCase() || 'U'}
+                  <div className="avatar"
+                    onClick={() => role === 'business' ? setIsMenuOpen(true) : showToast('Profile coming soon!')}
+                    role="button" tabIndex={0}
+                    onKeyDown={e => e.key === 'Enter' && (role === 'business' ? setIsMenuOpen(true) : showToast('Profile coming soon!'))}
+                    title="Profile"
+                  >
+                    {userProfile?.full_name?.[0]?.toUpperCase() || userProfile?.fullName?.[0]?.toUpperCase() || 'U'}
                   </div>
                 </div>
               </header>
 
               {/* Category filter */}
-              <div className="filter-bar">
+              <div className="filter-bar" role="tablist">
                 {['All','Electronics','Fashion','Food','Health','Agriculture','Home','Services'].map(cat => (
-                  <button key={cat} className={`filter-chip ${activeCatFilter === cat ? 'active' : ''}`} onClick={() => setActiveCatFilter(cat)}>{cat}</button>
+                  <button
+                    key={cat}
+                    className={`filter-chip ${activeCatFilter === cat ? 'active' : ''}`}
+                    onClick={() => setActiveCatFilter(cat)}
+                    role="tab"
+                    aria-selected={activeCatFilter === cat}
+                  >{cat}</button>
                 ))}
               </div>
 
-              {/* Main content */}
-              <main className="main-feed">
+              <div className="main-feed">
+                {/* Feed */}
                 <div className="feed-left">
-                  <div className="section-title">📢 {role === 'business' ? 'Market Network' : 'Latest Posts'}</div>
-                  {posts.length > 0 ? posts
-                    .filter(p => activeCatFilter === 'All' || p.business_category?.includes(activeCatFilter))
-                    .map(post => (
+                  {feedLoading ? (
+                    <div style={{ display:'flex', justifyContent:'center', padding:'40px 0' }}><Spinner size={32} /></div>
+                  ) : filteredPosts.length > 0 ? filteredPosts.map(post => (
                     <div className="post-card" key={post.id}>
                       <div className="post-header">
-                        <div className="post-biz-avatar">{(post.business_name || 'B')[0].toUpperCase()}</div>
+                        <div className="post-biz-avatar">{(post.business_name || 'B')[0]?.toUpperCase()}</div>
                         <div className="post-biz-info">
-                          <div className="post-biz-name" onClick={() => showView('view-store')}>
-                            {post.business_name}
-                            {post.is_followed && <span className="following-badge">✅ Following</span>}
+                          <div className="post-biz-name">
+                            {post.business_name || 'Unknown Business'}
+                            {post.is_followed && <span className="following-badge">Following</span>}
                           </div>
-                          <div className="post-biz-cat">{post.tagline || 'Business'} · {post.location_state || 'Nigeria'}</div>
+                          <div className="post-biz-cat">{post.business_category || 'General'} {post.location_state ? `· ${post.location_state}` : ''}</div>
                         </div>
-                        <div className="post-time">{new Date(post.timestamp).toLocaleDateString('en-NG')}</div>
+                        <div className="post-time">{post.timestamp ? new Date(post.timestamp).toLocaleDateString('en-NG', { day:'numeric', month:'short' }) : 'Recent'}</div>
                       </div>
-                      <div className="post-body">Check out our latest listing: <strong>{post.name}</strong></div>
+                      {post.image && (
+                        <div style={{ margin:'0 14px 10px', borderRadius:8, overflow:'hidden', maxHeight:240 }}>
+                          <img src={post.image.startsWith('http') ? post.image : `${API}${post.image}`} alt={post.name} style={{ width:'100%', objectFit:'cover' }} />
+                        </div>
+                      )}
+                      <div className="post-body">{post.name}</div>
                       <div className="post-product-bar">
-                        <span className="post-price">₦{parseFloat(post.price).toLocaleString()}</span>
-                        <span className={`post-stock ${post.stock > 0 ? 'in' : 'out'}`}>{post.stock > 0 ? 'In Stock' : 'Out of Stock'}</span>
+                        <span className="post-price">₦{Number(post.price).toLocaleString()}</span>
+                        <span className={`post-stock ${post.stock > 0 ? 'in' : 'out'}`}>{post.stock > 0 ? `${post.stock} in stock` : 'Out of stock'}</span>
                       </div>
                       <div className="post-actions-bar">
-                        <div className="post-action" onClick={() => showToast('❤️ Liked!')}>❤️ Like</div>
-                        <div className="post-action" onClick={() => openChat({ id: post.business_id, name: post.business_name })}>💬 Inquire</div>
-                        <div className="post-action" onClick={() => handleFollow(post.business_id, post.business_name)}>➕ Follow</div>
-                        <div className="post-action" onClick={() => { navigator.share?.({ title: post.name, text: `Check out ${post.name} at ₦${parseFloat(post.price).toLocaleString()}` }) || showToast('Copy the URL to share!'); }}>🔗 Share</div>
+                        <div className="post-action" onClick={() => showToast('❤️ Liked!')} role="button" tabIndex={0}>❤️ Like</div>
+                        <div className="post-action" onClick={() => openChat({ id: post.business_id, name: post.business_name })} role="button" tabIndex={0}>💬 Inquire</div>
+                        <div className="post-action" onClick={() => handleFollow(post.business_id, post.business_name)} role="button" tabIndex={0}>➕ Follow</div>
+                        <div className="post-action" onClick={() => {
+                          if (navigator.share) navigator.share({ title: post.name, text: `Check out ${post.name} at ₦${Number(post.price).toLocaleString()}` });
+                          else showToast('Copy the URL to share!');
+                        }} role="button" tabIndex={0}>🔗 Share</div>
                       </div>
                     </div>
                   )) : (
@@ -1264,11 +1470,11 @@ export default function App() {
                   )}
                 </div>
 
-                {/* Right sidebar (desktop) */}
+                {/* Right sidebar (desktop only) */}
                 <div className="feed-right">
                   <div className="section-title">🏪 Nearby Stores</div>
                   {stores.length > 0 ? stores.slice(0,4).map(s => (
-                    <div className="store-card" key={s.id} onClick={() => showView('view-store')}>
+                    <div className="store-card" key={s.id} onClick={() => { setViewingStore(s); showView('view-store'); }} role="button" tabIndex={0}>
                       <div className="store-card-avatar">{(s.business_name||'B')[0]}</div>
                       <div className="store-card-info">
                         <div className="store-card-name">{s.business_name}</div>
@@ -1284,15 +1490,15 @@ export default function App() {
                   <div className="section-title" style={{ marginTop:24 }}>🤖 AI Price Advisor</div>
                   <div className="ai-advisor-box">
                     <p style={{ minHeight:40, fontSize:'0.85rem', color:'rgba(255,255,255,0.85)', lineHeight:1.5 }}>
-                      {aiResponse || "Ask me if a price is fair or what to buy!"}
+                      {aiLoading ? '⏳ Thinking…' : aiResponse || "Ask me if a price is fair or what to buy!"}
                     </p>
                     <div className="ai-input-row">
-                      <input type="text" placeholder="e.g. Is ₦45k fair for iPhone 11?" value={aiQuery} onChange={e => setAiQuery(e.target.value)} onKeyPress={e => e.key === 'Enter' && askAI()} />
-                      <button onClick={askAI}>Ask</button>
+                      <input type="text" placeholder="e.g. Is ₦45k fair for iPhone 11?" value={aiQuery} onChange={e => setAiQuery(e.target.value)} onKeyDown={e => e.key === 'Enter' && askAI()} aria-label="Ask AI advisor" />
+                      <button onClick={askAI} disabled={aiLoading}>{aiLoading ? '…' : 'Ask'}</button>
                     </div>
                   </div>
                 </div>
-              </main>
+              </div>
 
               {/* Bottom nav */}
               {role === 'business' ? <BizBottomNav active="social-feed" /> : (
@@ -1315,7 +1521,7 @@ export default function App() {
             <div className="app-shell">
               <header className="explore-header">
                 <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:10 }}>
-                  <button className="back-btn sm" onClick={() => showView('customer-home')}>←</button>
+                  <button className="back-btn sm" onClick={() => showView('customer-home')} aria-label="Back to home">←</button>
                   <span style={{ fontWeight:700, fontSize:'1rem', flex:1 }}>🔍 Search Results</span>
                   <span style={{ fontSize:'0.8rem', color:'var(--text-muted)' }}>{stores.length} found</span>
                 </div>
@@ -1336,23 +1542,35 @@ export default function App() {
                         else if (searchMode === 'business') setSearchData(d => ({...d, name: e.target.value}));
                         else setSearchData(d => ({...d, location: e.target.value}));
                       }}
-                      onKeyPress={e => e.key === 'Enter' && handleMultiSearch()}
+                      onKeyDown={e => e.key === 'Enter' && handleMultiSearch()}
+                      aria-label="Refine search"
                     />
                   </div>
-                  <button className="gps-btn" onClick={handleGetLocation} disabled={isLocating}>{isLocating ? '⏳' : userLocation ? '✅' : '📡'}</button>
+                  <button className="gps-btn" onClick={handleGetLocation} disabled={isLocating} aria-label="Use my location">{isLocating ? '⏳' : userLocation ? '✅' : '📡'}</button>
                   <button className="search-btn" onClick={handleMultiSearch}>Go</button>
                 </div>
-                {userLocation && <div className="location-label" style={{ marginTop:6 }}>📍 Near <strong>{userLocation.label}</strong> <button onClick={() => { setUserLocation(null); }} className="clear-loc">✕</button></div>}
+                {userLocation && (
+                  <div className="location-label" style={{ marginTop:6 }}>
+                    📍 Near <strong>{userLocation.label}</strong>
+                    <button onClick={() => setUserLocation(null)} className="clear-loc" aria-label="Clear location">✕</button>
+                  </div>
+                )}
               </header>
 
               <div className="filter-bar">
                 {['All','Electronics','Fashion','Food','Health','Agriculture'].map(cat => (
-                  <button key={cat} className="filter-chip" onClick={() => { setSearchData(d => ({...d, product: cat === 'All' ? '' : cat})); setSearchMode('product'); setTimeout(handleMultiSearch, 50); }}>{cat}</button>
+                  <button key={cat} className={`filter-chip ${(searchMode === 'product' && searchData.product === (cat === 'All' ? '' : cat)) ? 'active' : ''}`} onClick={() => {
+                    setSearchData(d => ({...d, product: cat === 'All' ? '' : cat}));
+                    setSearchMode('product');
+                    setTimeout(handleMultiSearch, 50);
+                  }}>{cat}</button>
                 ))}
               </div>
 
               <main style={{ padding:16, overflowY:'auto', flex:1, paddingBottom:80 }}>
-                {stores.length === 0 ? (
+                {searchLoading ? (
+                  <div style={{ display:'flex', justifyContent:'center', padding:'60px 0' }}><Spinner size={32} /></div>
+                ) : stores.length === 0 ? (
                   <div style={{ textAlign:'center', padding:'60px 20px', color:'var(--text-muted)' }}>
                     <div style={{ fontSize:'3rem', marginBottom:12 }}>🔍</div>
                     <p style={{ fontWeight:600 }}>No results yet</p>
@@ -1380,7 +1598,7 @@ export default function App() {
                             </div>
                           )}
                           <div className="result-actions">
-                            <button className="btn-primary sm" onClick={() => showView('view-store')}>🏪 View Store</button>
+                            <button className="btn-primary sm" onClick={() => { setViewingStore(store); showView('view-store'); }}>🏪 View Store</button>
                             <button className="btn-ghost sm" onClick={() => openChat({ id: store.id, name: store.business_name })}>💬 Inquire</button>
                             <button className="btn-ghost sm" onClick={() => handleFollow(store.id, store.business_name)}>❤️ Follow</button>
                           </div>
@@ -1406,29 +1624,36 @@ export default function App() {
         ═══════════════════════════════════════════════════════════ */}
         {view === 'chat' && (
           <div className="view active" style={{ minHeight:'100vh', background:'var(--bg)' }}>
-            <header className="app-header">
-              <button className="back-btn sm" onClick={() => showView(role === 'business' ? 'business-dash' : 'customer-home')}>←</button>
-              <h2 style={{ flex:1, fontSize:'1.05rem', fontFamily:'Syne, sans-serif' }}>💬 Messages</h2>
-            </header>
-            <div className="chat-list" style={{ paddingBottom:80 }}>
-              {chatList.length > 0 ? chatList.map(chat => (
-                <div key={chat.id} className="chat-item" onClick={() => openChat(chat)}>
-                  <div className={`chat-avatar ${chat.is_business ? 'biz' : ''}`}>{(chat.name || 'U')[0].toUpperCase()}</div>
-                  <div className="chat-info">
-                    <div className="chat-name">{chat.name}</div>
-                    <div className="chat-preview">{chat.last_message || 'No messages yet'}</div>
-                  </div>
-                  {chat.unread_count > 0 && <span className="unread-badge">{chat.unread_count}</span>}
-                </div>
-              )) : (
-                <div className="empty-chat-state">
-                  <div style={{ fontSize:'3rem', marginBottom:12 }}>💬</div>
-                  <p style={{ fontWeight:600, marginBottom:6 }}>Your inbox is empty</p>
-                  <p style={{ fontSize:'0.82rem', color:'var(--text-muted)' }}>Messages from businesses and buyers appear here.</p>
-                  <button className="btn-primary sm" style={{ marginTop:16 }} onClick={() => showView('explore')}>🔍 Find Businesses to Chat</button>
-                </div>
+            <header className="app-header" style={{ flexWrap:'nowrap' }}>
+              <button className="back-btn sm" onClick={() => showView(role === 'business' ? 'business-dash' : 'customer-home')} aria-label="Go back">←</button>
+              <h2 style={{ flex:1, fontSize:'1.05rem', fontFamily:'Syne, sans-serif', margin:0 }}>💬 Messages</h2>
+              {role === 'business' && (
+                <div className="avatar" onClick={() => setIsMenuOpen(true)} role="button" tabIndex={0}>{avatarLetter}</div>
               )}
-            </div>
+            </header>
+            {chatLoading ? (
+              <div style={{ display:'flex', justifyContent:'center', padding:'60px 0' }}><Spinner size={32} /></div>
+            ) : (
+              <div className="chat-list" style={{ paddingBottom:80 }}>
+                {chatList.length > 0 ? chatList.map(chat => (
+                  <div key={chat.id} className="chat-item" onClick={() => openChat(chat)} role="button" tabIndex={0} onKeyDown={e => e.key === 'Enter' && openChat(chat)}>
+                    <div className={`chat-avatar ${chat.is_business ? 'biz' : ''}`}>{(chat.name || 'U')[0].toUpperCase()}</div>
+                    <div className="chat-info">
+                      <div className="chat-name">{chat.name}</div>
+                      <div className="chat-preview">{chat.last_message || 'No messages yet'}</div>
+                    </div>
+                    {chat.unread_count > 0 && <span className="unread-badge">{chat.unread_count}</span>}
+                  </div>
+                )) : (
+                  <div className="empty-chat-state">
+                    <div style={{ fontSize:'3rem', marginBottom:12 }}>💬</div>
+                    <p style={{ fontWeight:600, marginBottom:6 }}>Your inbox is empty</p>
+                    <p style={{ fontSize:'0.82rem', color:'var(--text-muted)' }}>Messages from businesses and buyers appear here.</p>
+                    <button className="btn-primary sm" style={{ marginTop:16 }} onClick={() => showView('explore')}>🔍 Find Businesses to Chat</button>
+                  </div>
+                )}
+              </div>
+            )}
             {role === 'business' ? <BizBottomNav active="chat" /> : (
               <nav className="bottom-nav">
                 <button className="bnav-btn" onClick={() => showView('customer-home')}>🏠<span>Home</span></button>
@@ -1447,13 +1672,18 @@ export default function App() {
           <div className="view active">
             <div className="chat-open-shell">
               <header className="chat-header">
-                <button className="back-btn sm" onClick={() => showView('chat')}>←</button>
-                <div className="chat-header-avatar">{(activeChat.name||'?')[0]}</div>
+                <button
+                  className="back-btn sm"
+                  onClick={() => showView('chat')}
+                  aria-label="Back to messages"
+                  style={{ minWidth:36, minHeight:36, display:'flex', alignItems:'center', justifyContent:'center' }}
+                >←</button>
+                <div className="chat-header-avatar">{(activeChat.name || '?')[0].toUpperCase()}</div>
                 <div className="chat-header-info">
                   <div className="chat-header-name">{activeChat.name || 'Unknown'}</div>
                   <div className="chat-header-status">● Online</div>
                 </div>
-                <button className="icon-btn" onClick={() => showToast('Voice call coming soon!')}>📞</button>
+                <button className="icon-btn" onClick={() => showToast('Voice call coming soon!')} aria-label="Call">📞</button>
               </header>
 
               <div className="chat-messages">
@@ -1467,7 +1697,7 @@ export default function App() {
                     <div className="msg-bubble">
                       {msg.content || msg.text}
                       <span className="msg-time">
-                        {msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString('en-NG', { hour:'2-digit', minute:'2-digit' }) : msg.time || ''}
+                        {msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString('en-NG', { hour:'2-digit', minute:'2-digit' }) : ''}
                       </span>
                     </div>
                   </div>
@@ -1481,9 +1711,10 @@ export default function App() {
                   placeholder="Type a message…"
                   value={chatInput}
                   onChange={e => setChatInput(e.target.value)}
-                  onKeyPress={e => e.key === 'Enter' && sendMessage()}
+                  onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMessage()}
+                  aria-label="Message input"
                 />
-                <button className="send-btn" onClick={sendMessage}>➤</button>
+                <button className="send-btn" onClick={sendMessage} aria-label="Send message">➤</button>
               </div>
             </div>
           </div>
@@ -1496,15 +1727,16 @@ export default function App() {
       ═══════════════════════════════════════════════════════════ */}
       <div className="chatbot-floating-container">
         {botOpen && (
-          <div className="chat-window">
+          <div className="chat-window" role="dialog" aria-label="AI Advisor">
             <div className="chat-window-header">
               <span>🤖 El-Mart Advisor</span>
-              <button onClick={() => setBotOpen(false)} style={{ background:'none', border:'none', color:'white', cursor:'pointer', fontSize:'1.1rem' }}>✕</button>
+              <button onClick={() => setBotOpen(false)} style={{ background:'none', border:'none', color:'white', cursor:'pointer', fontSize:'1.1rem' }} aria-label="Close chatbot">✕</button>
             </div>
             <div className="chat-window-messages">
               {botMessages.map((msg, i) => (
                 <div key={i} className={`bot-msg ${msg.sender === 'user' ? 'bot-msg-user' : 'bot-msg-bot'}`}>{msg.text}</div>
               ))}
+              {botLoading && <div className="bot-msg bot-msg-bot" style={{ fontStyle:'italic' }}>Thinking… ⏳</div>}
               <div ref={botEndRef} />
             </div>
             <div className="chat-window-input">
@@ -1513,13 +1745,14 @@ export default function App() {
                 placeholder="e.g. Is ₦45k fair for iPhone 11?"
                 value={botInput}
                 onChange={e => setBotInput(e.target.value)}
-                onKeyPress={e => e.key === 'Enter' && askBot()}
+                onKeyDown={e => e.key === 'Enter' && askBot()}
+                aria-label="Ask AI"
               />
-              <button onClick={askBot}>Send</button>
+              <button onClick={askBot} disabled={botLoading}>{botLoading ? '…' : 'Send'}</button>
             </div>
           </div>
         )}
-        <button className="chat-toggle-btn" onClick={() => setBotOpen(p => !p)} title="AI Advisor">
+        <button className="chat-toggle-btn" onClick={() => setBotOpen(p => !p)} title="AI Advisor" aria-label="Toggle AI advisor">
           {botOpen ? '✕' : '🤖'}
         </button>
       </div>

@@ -816,3 +816,89 @@ h1,h2,h3,.logo { font-family:'Syne',sans-serif; }
   50%  { background-position:100% 50%; }
   100% { background-position:0%   50%; }
 }
+
+/* ── Spinner ─────────────────────────────────────────────── */
+.spinner {
+  display: inline-block;
+  border: 2.5px solid rgba(255,255,255,0.35);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Dark spinner variant (on light bg) */
+.spinner.dark {
+  border-color: rgba(10,37,64,.15);
+  border-top-color: var(--orange);
+}
+
+/* ── Dash loading state ──────────────────────────────────── */
+.dash-loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 60px 20px;
+}
+.dash-loading .spinner {
+  border-color: rgba(10,37,64,.12);
+  border-top-color: var(--orange);
+}
+
+/* ── Button disabled state ───────────────────────────────── */
+.btn-primary:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+/* ── Back button on chat-open — always visible ───────────── */
+.chat-header .back-btn.sm {
+  min-width: 36px;
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  font-size: 1.3rem;
+  color: var(--navy);
+  flex-shrink: 0;
+}
+.chat-header .back-btn.sm:hover {
+  background: var(--surface2);
+}
+
+/* ── Fix: post-stock undefined guard ─────────────────────── */
+.post-stock {
+  font-size: .75rem;
+  padding: 3px 10px;
+  border-radius: 100px;
+  font-weight: 600;
+}
+
+/* ── View-store back button always on top of overlay ─────── */
+.store-back-btn {
+  z-index: 20;
+}
+
+/* ── Notification dropdown click-outside safety ──────────── */
+.notif-dropdown {
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+/* ── Explore main scroll area ────────────────────────────── */
+.app-shell { position: relative; }
+
+/* ── Fix missing main-feed wrapper display ───────────────── */
+.main-feed { overflow: hidden; }
+
+/* ── Consistent focus outlines for accessibility ─────────── */
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--orange);
+  outline-offset: 2px;
+}
