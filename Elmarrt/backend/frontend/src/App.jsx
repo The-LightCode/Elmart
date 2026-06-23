@@ -137,9 +137,11 @@ export default function App() {
     if (savedToken && savedProfile) {
       try {
         const profile = JSON.parse(savedProfile);
+        const resolvedRole = savedRole || (profile.is_business ? 'business' : profile.role || 'customer');
         setUserProfile(profile);
-        setRole(savedRole || (profile.is_business ? 'business' : 'customer'));
-        showView(savedRole === 'business' ? 'business-dash' : 'customer-home');
+        setRole(resolvedRole);
+        window.scrollTo(0, 0);
+        setView(resolvedRole === 'business' ? 'business-dash' : 'customer-home');
       } catch {}
     }
   }, []);
@@ -155,7 +157,7 @@ export default function App() {
     if (view === 'chat') fetchChatList();
     if (view === 'newsletter') fetchSubscribers();
     if (view === 'explore' && stores.length === 0) handleMultiSearch();
-  }, [view]);
+  }, [view, handleMultiSearch]);
 
   useEffect(() => { if (userProfile) fetchNotifications(); }, [userProfile]);
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior:'smooth' }); }, [messages]);
@@ -321,7 +323,9 @@ export default function App() {
       await axios.post(`${API}/api/my-products/`, {
         name: productData.name,
         price: parseFloat(productData.price),
-        stock: parseInt(productData.stock || 0)
+        stock: parseInt(productData.stock || 0),
+        category: productData.category,
+        description: productData.description,
       }, authH());
       showToast('Product listed! 🚀');
       setProductData({ name:'', price:'', stock:'', category:'Electronics', description:'' });
@@ -363,7 +367,7 @@ export default function App() {
   //  SEARCH / EXPLORE
   // ══════════════════════════════════════════════════════════════════════
 
-  const handleMultiSearch = async () => {
+  const handleMultiSearch = useCallback(async () => {
     const params = new URLSearchParams();
     if (searchMode === 'product' && searchData.product) params.set('product', searchData.product);
     if (searchMode === 'business' && searchData.name) params.set('name', searchData.name);
@@ -375,7 +379,6 @@ export default function App() {
     try {
       const r = await axios.get(`${API}/api/discover/?${params}`);
       setStores(Array.isArray(r.data) ? r.data : []);
-      showView('explore');
     } catch {
       // Fallback demo data so the UI never shows broken
       setStores([
@@ -383,11 +386,10 @@ export default function App() {
         { id:2, business_name:'Kemi Fashion Closet', business_category:'Fashion', location_state:'Lagos', tagline:'Affordable luxury wear', distance_km:2.8, matched_products:[] },
         { id:3, business_name:'Mama Nkechi Groceries', business_category:'Food & Groceries', location_state:'Enugu', tagline:'Fresh daily from the farm', distance_km:4.1, matched_products:[{name:'Rice (50kg)',price:'65000'}] },
       ]);
-      showView('explore');
     } finally {
       setSearchLoading(false);
     }
-  };
+  }, [searchMode, searchData, userLocation]);
 
   const handleGetLocation = () => {
     if (!navigator.geolocation) return showToast("Location not supported on this browser.");
@@ -764,13 +766,21 @@ export default function App() {
                   <p>Try a demo:</p>
                   <button className="demo-btn" onClick={() => {
                     const p = { id:99, full_name:'Demo Customer', username:'demo_customer', role:'customer' };
-                    setRole('customer'); setUserProfile(p); localStorage.setItem('role','customer'); localStorage.setItem('profile', JSON.stringify(p)); showView('customer-home');
+                    setRole('customer'); setUserProfile(p);
+                    localStorage.setItem('token','demo_token_customer');
+                    localStorage.setItem('role','customer');
+                    localStorage.setItem('profile', JSON.stringify(p));
+                    showView('customer-home');
                   }}>
                     🛒 Demo Customer
                   </button>
                   <button className="demo-btn" onClick={() => {
                     const p = { id:100, full_name:'Demo CEO', username:'democeo', business_name:'Demo Store', business_category:'Electronics', tagline:'Best store in town', location_state:'Lagos', role:'business' };
-                    setRole('business'); setUserProfile(p); localStorage.setItem('role','business'); localStorage.setItem('profile', JSON.stringify(p)); showView('business-dash');
+                    setRole('business'); setUserProfile(p);
+                    localStorage.setItem('token','demo_token_business');
+                    localStorage.setItem('role','business');
+                    localStorage.setItem('profile', JSON.stringify(p));
+                    showView('business-dash');
                   }}>
                     🏪 Demo Business
                   </button>
@@ -1366,7 +1376,7 @@ export default function App() {
                     <button className="gps-btn" title="Use my location" onClick={handleGetLocation} disabled={isLocating} aria-label="Use my location">
                       {isLocating ? '⏳' : userLocation ? '✅' : '📡'}
                     </button>
-                    <button className="search-btn" onClick={handleMultiSearch} aria-label="Search">🔍</button>
+                    <button className="search-btn" onClick={() => { showView('explore'); handleMultiSearch(); }} aria-label="Search">🔍</button>
                   </div>
                   {userLocation && (
                     <div className="location-label">
@@ -1465,7 +1475,7 @@ export default function App() {
                       <div style={{ fontSize:'3rem', marginBottom:12 }}>📭</div>
                       <p style={{ fontWeight:600, marginBottom:6 }}>Feed is empty</p>
                       <p style={{ fontSize:'0.83rem' }}>Use the search above to discover businesses near you!</p>
-                      <button className="btn-primary sm" style={{ marginTop:16 }} onClick={handleMultiSearch}>🔍 Discover Businesses</button>
+                      <button className="btn-primary sm" style={{ marginTop:16 }} onClick={() => { showView('explore'); handleMultiSearch(); }}>🔍 Discover Businesses</button>
                     </div>
                   )}
                 </div>
@@ -1483,7 +1493,7 @@ export default function App() {
                     </div>
                   )) : (
                     <div style={{ color:'var(--text-muted)', fontSize:'0.83rem', padding:'12px 0' }}>
-                      <button className="btn-ghost sm full" onClick={handleMultiSearch}>🔍 Find Nearby Stores</button>
+                      <button className="btn-ghost sm full" onClick={() => { showView('explore'); handleMultiSearch(); }}>🔍 Find Nearby Stores</button>
                     </div>
                   )}
 
@@ -1759,3 +1769,4 @@ export default function App() {
     </>
   );
 }
+
