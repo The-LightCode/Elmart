@@ -4,9 +4,9 @@ from .models import Product, Order, Post, Message
 
 # 👑 Customize how you view things in the dashboard (Optional but helpful)
 class ProductAdmin(admin.ModelAdmin):
-    list_display = ('name', 'price', 'stock', 'category') # Columns you see in the list
-    search_fields = ('name', 'category')                  # Adds a search bar for products
-    list_filter = ('category',)                           # Adds a sidebar filter
+    list_display = ('name', 'price', 'stock') # Cleaned columns 
+    search_fields = ('name',)                 # Search bar targets name only
+    list_filter = ('created_at',)             # Filters items by creation date
 
 class OrderAdmin(admin.ModelAdmin):
     list_display = ('id', 'product', 'quantity', 'status')
