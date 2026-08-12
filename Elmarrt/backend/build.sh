@@ -2,8 +2,12 @@
 # exit on error
 set -o errexit
 
-# Step into the folder where manage.py and requirements.txt live
-cd Elmarrt/backend
+# DYNAMIC PATH: Check if we are in root or already inside the subfolder
+if [ -d "Elmarrt/backend" ]; then
+    cd Elmarrt/backend
+elif [ -d "backend" ]; then
+    cd backend
+fi
 
 # 1. Install dependencies
 pip install -r requirements.txt
