@@ -153,16 +153,16 @@ if not DEBUG:
 CORS_ALLOW_CREDENTIALS = True
 
 CORS_ALLOWED_ORIGINS = [
-    "https://netlify.app", 
+    "https://el-mart.netlify.app", 
     "http://localhost:5173",
     "http://127.0.0.1:5173",
     "http://localhost:3000",
-    "https://vercel.app",
+    "https://el-mart.vercel.app",
 ]
 
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:5173",
-    "https://://onrender.com",
+    "https://elmart.onrender.com",
 ]
 
 CORS_ALLOW_HEADERS = [
