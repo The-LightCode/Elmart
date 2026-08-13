@@ -157,7 +157,8 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
     "http://localhost:3000",
-    "https://el-mart.vercel.app",
+    "https://elmart-ni79.vercel.app",
+    "https://elmart-six.vercel.app"
 ]
 
 CSRF_TRUSTED_ORIGINS = [
