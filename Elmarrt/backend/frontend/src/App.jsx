@@ -112,7 +112,8 @@ export default function App() {
   // ── Derived helpers ─────────────────────────────────────────────────────────
   const token = () => localStorage.getItem('token');
   const authH = () => ({ headers: { Authorization: `Token ${token()}` } });
-  const avatarLetter = (userProfile?.business_name?.[0] || userProfile?.full_name?.[0] || userProfile?.fullName?.[0] || userProfile?.username?.[0] || 'U').toUpperCase();
+  const avatarLetter = String(userProfile?.business_name || userProfile?.full_name || userProfile?.fullName || userProfile?.username || 'U').charAt(0).toUpperCase();
+
 
   // ══════════════════════════════════════════════════════════════════════
   //  CLOSE NOTIFICATION DROPDOWN ON OUTSIDE CLICK
