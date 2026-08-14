@@ -148,6 +148,35 @@ export default function App() {
   }, []);
 
   // ══════════════════════════════════════════════════════════════════════
+  //  SEARCH / EXPLORE (defined here, above the effect below, so that the
+  //  effect's dependency array doesn't reference it before it's initialized)
+  // ══════════════════════════════════════════════════════════════════════
+
+  const handleMultiSearch = useCallback(async () => {
+    const params = new URLSearchParams();
+    if (searchMode === 'product' && searchData.product) params.set('product', searchData.product);
+    if (searchMode === 'business' && searchData.name) params.set('name', searchData.name);
+    if (searchMode === 'location' && searchData.location) params.set('location', searchData.location);
+    if (searchMode !== 'location' && searchData.location) params.set('location', searchData.location);
+    if (userLocation) { params.set('lat', userLocation.lat); params.set('lng', userLocation.lng); }
+
+    setSearchLoading(true);
+    try {
+      const r = await axios.get(`${API}/api/discover/?${params}`);
+      setStores(Array.isArray(r.data) ? r.data : []);
+    } catch {
+      // Fallback demo data so the UI never shows broken
+      setStores([
+        { id:1, business_name:'Lagos Tech Hub', business_category:'Electronics', location_state:'Lagos', tagline:'Best gadgets in town', distance_km:1.4, matched_products:[{name:'iPhone 14',price:'350000'}] },
+        { id:2, business_name:'Kemi Fashion Closet', business_category:'Fashion', location_state:'Lagos', tagline:'Affordable luxury wear', distance_km:2.8, matched_products:[] },
+        { id:3, business_name:'Mama Nkechi Groceries', business_category:'Food & Groceries', location_state:'Enugu', tagline:'Fresh daily from the farm', distance_km:4.1, matched_products:[{name:'Rice (50kg)',price:'65000'}] },
+      ]);
+    } finally {
+      setSearchLoading(false);
+    }
+  }, [searchMode, searchData, userLocation]);
+
+  // ══════════════════════════════════════════════════════════════════════
   //  DATA FETCHING
   // ══════════════════════════════════════════════════════════════════════
 
@@ -367,30 +396,6 @@ export default function App() {
   // ══════════════════════════════════════════════════════════════════════
   //  SEARCH / EXPLORE
   // ══════════════════════════════════════════════════════════════════════
-
-  const handleMultiSearch = useCallback(async () => {
-    const params = new URLSearchParams();
-    if (searchMode === 'product' && searchData.product) params.set('product', searchData.product);
-    if (searchMode === 'business' && searchData.name) params.set('name', searchData.name);
-    if (searchMode === 'location' && searchData.location) params.set('location', searchData.location);
-    if (searchMode !== 'location' && searchData.location) params.set('location', searchData.location);
-    if (userLocation) { params.set('lat', userLocation.lat); params.set('lng', userLocation.lng); }
-
-    setSearchLoading(true);
-    try {
-      const r = await axios.get(`${API}/api/discover/?${params}`);
-      setStores(Array.isArray(r.data) ? r.data : []);
-    } catch {
-      // Fallback demo data so the UI never shows broken
-      setStores([
-        { id:1, business_name:'Lagos Tech Hub', business_category:'Electronics', location_state:'Lagos', tagline:'Best gadgets in town', distance_km:1.4, matched_products:[{name:'iPhone 14',price:'350000'}] },
-        { id:2, business_name:'Kemi Fashion Closet', business_category:'Fashion', location_state:'Lagos', tagline:'Affordable luxury wear', distance_km:2.8, matched_products:[] },
-        { id:3, business_name:'Mama Nkechi Groceries', business_category:'Food & Groceries', location_state:'Enugu', tagline:'Fresh daily from the farm', distance_km:4.1, matched_products:[{name:'Rice (50kg)',price:'65000'}] },
-      ]);
-    } finally {
-      setSearchLoading(false);
-    }
-  }, [searchMode, searchData, userLocation]);
 
   const handleGetLocation = () => {
     if (!navigator.geolocation) return showToast("Location not supported on this browser.");
@@ -1770,4 +1775,3 @@ export default function App() {
     </>
   );
 }
-
