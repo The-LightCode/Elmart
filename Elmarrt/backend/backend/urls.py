@@ -59,5 +59,15 @@ urlpatterns = [
     path('api/newsletter/subscribers/', views.get_business_subscribers, name='subscribers_list'),
     path('api/newsletter/subscribe/<int:business_id>/', views.subscribe_to_newsletter, name='subscribe'),
 
-]+ static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+    # Follow/unfollow a business — the frontend already POSTs here, this route just never existed.
+    path('api/follow/<int:user_id>/', views.toggle_follow, name='toggle_follow'),
 
+    # Orders
+    path('api/orders/', views.CreateOrderView.as_view(), name='create_order'),
+    path('api/orders/mine/', views.MyOrdersView.as_view(), name='my_orders'),
+    path('api/orders/business/', views.BusinessOrdersView.as_view(), name='business_orders'),
+    path('api/orders/<int:order_id>/status/', views.update_order_status, name='update_order_status'),
+
+    path('api/dashboard-stats/', views.BusinessDashboardStatsView.as_view(), name='dashboard_stats'),
+
+]+ static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
