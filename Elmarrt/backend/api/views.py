@@ -1,4 +1,4 @@
-from django.shortcuts import render
+from django.shortcuts import render, get_object_or_404
 from django.contrib.auth import authenticate # Make sure this is imported!
 from rest_framework.decorators import api_view
 # Add this at the top of api/views.py
@@ -29,9 +29,9 @@ from api.serializers import BusinessProfileSerializer # Ensure this matches your
 from .serializers import UserSerializer, ProductSerializer, MessageSerializer
 from django.db.models import Case, When, Value, IntegerField
 # api/views.py
-from .models import User, Product, Message, Subscriber  # <--- Add Subscriber here!
+from .models import User, Product, Message, Subscriber, Order, Post  # <--- Add Subscriber here!
 import math
-from .serializers import ProductSerializer
+from .serializers import ProductSerializer, OrderSerializer, PostSerializer
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
@@ -158,8 +158,7 @@ def ai_advisor(request):
 def get_social_feed(request):
     # Fetch posts from all businesses
     posts = Post.objects.all().order_by('-created_at')
-    # Serialize and return
-    return Response(serialized_data)
+    return Response(PostSerializer(posts, many=True).data)
 
 
 
@@ -194,6 +193,10 @@ def get_posts(request):
     try:
         products = Product.objects.select_related('business').order_by('-created_at')
 
+        followed_ids = set()
+        if request.user.is_authenticated:
+            followed_ids = set(request.user.following.values_list('id', flat=True))
+
         feed_data = []
         for prod in products:
             feed_data.append({
@@ -202,7 +205,7 @@ def get_posts(request):
                 "business_name": prod.business.business_name or prod.business.username,
                 "location_state": prod.business.location_state,
                 "tagline": prod.business.tagline,
-                "is_followed": False,  # Placeholder until you add User.following
+                "is_followed": prod.business.id in followed_ids,
                 "name": prod.name,
                 "price": str(prod.price),
                 "image": prod.image.url if prod.image else None,
@@ -449,8 +452,63 @@ class BusinessDashboardStatsView(APIView):
             "productCount": user.products.count(),
             "viewCount": user.view_count,
             "messageCount": Message.objects.filter(receiver=user, is_read=False).count(),
-            "followerCount": user.followers.count()
+            "followerCount": user.followers.count(),
+            "orderCount": Order.objects.filter(product__business=user).count(),
+            "pendingOrderCount": Order.objects.filter(product__business=user, status='Pending').count(),
         })
+
+class CreateOrderView(generics.CreateAPIView):
+    """Customer places an order (checkout) for a product."""
+    serializer_class = OrderSerializer
+    permission_classes = [IsAuthenticated]
+
+    def perform_create(self, serializer):
+        product = serializer.validated_data['product']
+        quantity = serializer.validated_data.get('quantity', 1)
+        order = serializer.save(user=self.request.user)
+        # Decrement stock so the same item can't be oversold
+        product.stock = max(0, product.stock - quantity)
+        product.save(update_fields=['stock'])
+        return order
+
+
+class MyOrdersView(generics.ListAPIView):
+    """Customer: orders I've placed."""
+    serializer_class = OrderSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return Order.objects.filter(user=self.request.user).select_related('product', 'product__business').order_by('-created_at')
+
+    def get_serializer_context(self):
+        return {'request': self.request}
+
+
+class BusinessOrdersView(generics.ListAPIView):
+    """Business: orders placed on my products."""
+    serializer_class = OrderSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return Order.objects.filter(product__business=self.request.user).select_related('product', 'user').order_by('-created_at')
+
+    def get_serializer_context(self):
+        return {'request': self.request}
+
+
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated])
+def update_order_status(request, order_id):
+    """Business updates the status of an order on one of their products."""
+    order = get_object_or_404(Order, id=order_id, product__business=request.user)
+    new_status = request.data.get('status')
+    valid_statuses = dict(Order.STATUS_CHOICES)
+    if new_status not in valid_statuses:
+        return Response({"error": f"Status must be one of {list(valid_statuses)}"}, status=400)
+    order.status = new_status
+    order.save(update_fields=['status', 'updated_at'])
+    return Response(OrderSerializer(order, context={'request': request}).data)
+
 
 class MessageViewSet(viewsets.ModelViewSet):
     serializer_class = MessageSerializer
@@ -465,4 +523,3 @@ class MessageViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         # Automatically set the sender to the logged-in user
         serializer.save(sender=self.request.user)
-
