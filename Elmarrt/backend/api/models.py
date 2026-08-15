@@ -20,6 +20,20 @@ class User(AbstractUser):
     latitude = models.DecimalField(max_digits=9, decimal_places=6, blank=True, null=True)
     longitude = models.DecimalField(max_digits=9, decimal_places=6, blank=True, null=True)
 
+    # Users (customers) following businesses. views.toggle_follow already
+    # relies on `me.following` / `target_user.followers` — this field was
+    # referenced in code but never actually defined, which is why /api/follow/
+    # would have 500'd the moment it was wired up.
+    following = models.ManyToManyField(
+        "self",
+        related_name="followers",
+        symmetrical=False,
+        blank=True,
+    )
+
+    # Simple page-view counter for the business dashboard stats.
+    view_count = models.PositiveIntegerField(default=0)
+
     def __str__(self):
         return self.email if self.email else self.username
     
@@ -80,11 +94,24 @@ class Subscriber(models.Model):
 
 
 class Order(models.Model):
+    STATUS_CHOICES = [
+        ('Pending', 'Pending'),
+        ('Confirmed', 'Confirmed'),
+        ('Shipped', 'Shipped'),
+        ('Delivered', 'Delivered'),
+        ('Cancelled', 'Cancelled'),
+    ]
+
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='orders')
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='ordered_items')
     quantity = models.PositiveIntegerField(default=1)
-    status = models.CharField(max_length=50, default='Pending')
+    status = models.CharField(max_length=50, choices=STATUS_CHOICES, default='Pending')
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    @property
+    def total_price(self):
+        return self.product.price * self.quantity
 
     def __str__(self):
         return f"Order {self.id} by {self.user.username}"
@@ -97,7 +124,3 @@ class Post(models.Model):
 
     def __str__(self):
         return self.title
-                                
-
-
-
