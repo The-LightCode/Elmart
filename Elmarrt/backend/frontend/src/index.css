@@ -902,3 +902,57 @@ textarea:focus-visible {
   outline: 2px solid var(--orange);
   outline-offset: 2px;
 }
+
+/* ══════════════════════════════════════════════════════════
+   ORDERS
+══════════════════════════════════════════════════════════ */
+.order-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 14px;
+}
+
+.order-card-top { display: flex; gap: 12px; align-items: flex-start; }
+
+.order-thumb {
+  width: 56px; height: 56px; flex-shrink: 0;
+  border-radius: 10px; object-fit: cover;
+  background: var(--surface2);
+}
+.order-thumb.placeholder {
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.4rem;
+}
+
+.order-product-name { font-weight: 700; font-size: .92rem; color: var(--navy); }
+.order-biz-name { font-size: .78rem; color: var(--text-muted); margin-top: 2px; }
+.order-meta { font-size: .8rem; color: var(--text); margin-top: 4px; font-weight: 600; }
+
+.order-status {
+  font-size: .7rem; font-weight: 700; padding: 4px 10px;
+  border-radius: 100px; white-space: nowrap; height: fit-content;
+}
+.status-pending   { background: #FFF4E5; color: #B45309; }
+.status-confirmed { background: #E5EFFF; color: #1D4ED8; }
+.status-shipped   { background: #EAE5FF; color: #6D28D9; }
+.status-delivered { background: #E4F9EE; color: #04763F; }
+.status-cancelled { background: #FDEAEA; color: var(--red); }
+
+.order-card-bottom {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border);
+}
+.order-date { font-size: .75rem; color: var(--text-muted); }
+
+.order-status-select {
+  border: 1.5px solid var(--border); border-radius: var(--radius-sm);
+  padding: 6px 10px; font-size: .8rem; font-weight: 600;
+  color: var(--navy); background: var(--surface); cursor: pointer;
+}
+.order-status-select:focus { border-color: var(--orange); }
+
+/* Buy action inside feed post-action bar */
+.post-action.buy { color: var(--orange); }
+.post-action.buy:hover { background: rgba(255,107,53,.1); }
+.post-action.disabled { opacity: .55; pointer-events: none; }
