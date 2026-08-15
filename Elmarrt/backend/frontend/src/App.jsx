@@ -48,7 +48,7 @@ export default function App() {
   const [authLoading, setAuthLoading]   = useState(false);
 
   // ── Dashboard ───────────────────────────────────────────────────────────────
-  const [stats, setStats]           = useState({ productCount:0, viewCount:0, messageCount:0, followerCount:0 });
+  const [stats, setStats]           = useState({ productCount:0, viewCount:0, messageCount:0, followerCount:0, orderCount:0, pendingOrderCount:0 });
   const [recentProducts, setRecentProducts] = useState([]);
   const [quickPost, setQuickPost]   = useState('');
   const [dashLoading, setDashLoading] = useState(false);
@@ -58,6 +58,13 @@ export default function App() {
   const [selectedMedia, setSelectedMedia] = useState([]);
   const [mediaPreviews, setMediaPreviews] = useState([]);
   const [productLoading, setProductLoading] = useState(false);
+
+  // ── Orders ──────────────────────────────────────────────────────────────────
+  const [myOrders, setMyOrders]         = useState([]);   // customer: orders I placed
+  const [myOrdersLoading, setMyOrdersLoading] = useState(false);
+  const [bizOrders, setBizOrders]       = useState([]);   // business: orders on my products
+  const [bizOrdersLoading, setBizOrdersLoading] = useState(false);
+  const [orderingId, setOrderingId]     = useState(null); // product id currently being ordered (disables its button)
 
   // ── Social feed ─────────────────────────────────────────────────────────────
   const [posts, setPosts]           = useState([]);
@@ -187,6 +194,8 @@ export default function App() {
     if (view === 'chat') fetchChatList();
     if (view === 'newsletter') fetchSubscribers();
     if (view === 'explore' && stores.length === 0) handleMultiSearch();
+    if (view === 'my-orders') fetchMyOrders();
+    if (view === 'biz-orders') fetchBusinessOrders();
   }, [view, handleMultiSearch]);
 
   useEffect(() => { if (userProfile) fetchNotifications(); }, [userProfile]);
@@ -209,11 +218,25 @@ export default function App() {
     if (!token()) return;
     setDashLoading(true);
     try {
-      const r = await axios.get(`${API}/api/my-products/`, authH());
-      const count = r.data.count ?? (Array.isArray(r.data.products) ? r.data.products.length : 0);
-      setStats(s => ({ ...s, productCount: count }));
-      if (Array.isArray(r.data.products)) setRecentProducts(r.data.products);
-      else if (Array.isArray(r.data)) setRecentProducts(r.data);
+      const [productsRes, statsRes] = await Promise.all([
+        axios.get(`${API}/api/my-products/`, authH()),
+        axios.get(`${API}/api/dashboard-stats/`, authH()).catch(() => null),
+      ]);
+      const count = productsRes.data.count ?? (Array.isArray(productsRes.data.products) ? productsRes.data.products.length : 0);
+      if (Array.isArray(productsRes.data.products)) setRecentProducts(productsRes.data.products);
+      else if (Array.isArray(productsRes.data)) setRecentProducts(productsRes.data);
+
+      setStats(s => ({
+        ...s,
+        productCount: count,
+        ...(statsRes ? {
+          viewCount: statsRes.data.viewCount,
+          messageCount: statsRes.data.messageCount,
+          followerCount: statsRes.data.followerCount,
+          orderCount: statsRes.data.orderCount,
+          pendingOrderCount: statsRes.data.pendingOrderCount,
+        } : {}),
+      }));
     } catch {}
     finally { setDashLoading(false); }
   };
@@ -515,6 +538,58 @@ export default function App() {
   };
 
   // ══════════════════════════════════════════════════════════════════════
+  //  ORDERS
+  // ══════════════════════════════════════════════════════════════════════
+
+  const handlePlaceOrder = async (productId, productName) => {
+    if (!token()) return showToast('Please log in to place an order.');
+    setOrderingId(productId);
+    try {
+      await axios.post(`${API}/api/orders/`, { product: productId, quantity: 1 }, authH());
+      showToast(`🛒 Order placed for ${productName}!`);
+    } catch (err) {
+      const msg = err.response?.data?.product?.[0] || err.response?.data?.quantity?.[0] || 'Could not place order. Try again.';
+      showToast(msg);
+    } finally {
+      setOrderingId(null);
+    }
+  };
+
+  const fetchMyOrders = async () => {
+    setMyOrdersLoading(true);
+    try {
+      const r = await axios.get(`${API}/api/orders/mine/`, authH());
+      setMyOrders(Array.isArray(r.data) ? r.data : []);
+    } catch {
+      setMyOrders([]);
+    } finally {
+      setMyOrdersLoading(false);
+    }
+  };
+
+  const fetchBusinessOrders = async () => {
+    setBizOrdersLoading(true);
+    try {
+      const r = await axios.get(`${API}/api/orders/business/`, authH());
+      setBizOrders(Array.isArray(r.data) ? r.data : []);
+    } catch {
+      setBizOrders([]);
+    } finally {
+      setBizOrdersLoading(false);
+    }
+  };
+
+  const handleUpdateOrderStatus = async (orderId, newStatus) => {
+    try {
+      await axios.patch(`${API}/api/orders/${orderId}/status/`, { status: newStatus }, authH());
+      setBizOrders(list => list.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
+      showToast(`Order #${orderId} marked ${newStatus}`);
+    } catch {
+      showToast('Could not update order status.');
+    }
+  };
+
+  // ══════════════════════════════════════════════════════════════════════
   //  FILTERED POSTS
   // ══════════════════════════════════════════════════════════════════════
 
@@ -561,6 +636,7 @@ export default function App() {
       {[
         { id:'business-dash', icon:'📊', label:'Dash' },
         { id:'biz-inventory', icon:'📦', label:'Products' },
+        { id:'biz-orders',    icon:'🧾', label:'Orders' },
         { id:'social-feed',   icon:'📱', label:'Feed' },
         { id:'chat',          icon:'💬', label:'Chat' },
         { id:'biz-store',     icon:'🏪', label:'Store' },
@@ -829,8 +905,16 @@ export default function App() {
                         { icon:'👁',  val: stats.viewCount || 0, lbl:'Store Views' },
                         { icon:'💬', val: stats.messageCount || 0, lbl:'Messages' },
                         { icon:'❤️', val: stats.followerCount || 0, lbl:'Followers' },
+                        { icon:'🧾', val: stats.pendingOrderCount || 0, lbl:'Pending Orders', onClick: () => showView('biz-orders') },
                       ].map(s => (
-                        <div className="biz-stat-card" key={s.lbl}>
+                        <div
+                          className="biz-stat-card"
+                          key={s.lbl}
+                          onClick={s.onClick}
+                          role={s.onClick ? 'button' : undefined}
+                          tabIndex={s.onClick ? 0 : undefined}
+                          style={s.onClick ? { cursor:'pointer' } : undefined}
+                        >
                           <div className="bstat-icon">{s.icon}</div>
                           <div className="bstat-val">{s.val}</div>
                           <div className="bstat-lbl">{s.lbl}</div>
@@ -1322,6 +1406,16 @@ export default function App() {
                                   {p.stock > 0 ? `${p.stock} in stock` : 'Out of stock'}
                                 </div>
                               )}
+                              {role !== 'business' && p.stock > 0 && (
+                                <button
+                                  className="btn-primary sm full"
+                                  style={{ marginTop:8 }}
+                                  disabled={orderingId === p.id}
+                                  onClick={() => handlePlaceOrder(p.id, p.name)}
+                                >
+                                  {orderingId === p.id ? '⏳' : '🛒 Buy'}
+                                </button>
+                              )}
                             </div>
                           </div>
                         ))}
@@ -1470,6 +1564,16 @@ export default function App() {
                         <div className="post-action" onClick={() => showToast('❤️ Liked!')} role="button" tabIndex={0}>❤️ Like</div>
                         <div className="post-action" onClick={() => openChat({ id: post.business_id, name: post.business_name })} role="button" tabIndex={0}>💬 Inquire</div>
                         <div className="post-action" onClick={() => handleFollow(post.business_id, post.business_name)} role="button" tabIndex={0}>➕ Follow</div>
+                        {post.stock > 0 && (
+                          <div
+                            className={`post-action buy ${orderingId === post.id ? 'disabled' : ''}`}
+                            onClick={() => orderingId !== post.id && handlePlaceOrder(post.id, post.name)}
+                            role="button"
+                            tabIndex={0}
+                          >
+                            {orderingId === post.id ? '⏳ Ordering…' : '🛒 Buy'}
+                          </div>
+                        )}
                         <div className="post-action" onClick={() => {
                           if (navigator.share) navigator.share({ title: post.name, text: `Check out ${post.name} at ₦${Number(post.price).toLocaleString()}` });
                           else showToast('Copy the URL to share!');
@@ -1522,6 +1626,7 @@ export default function App() {
                   <button className={`bnav-btn ${view === 'customer-home' ? 'active' : ''}`} onClick={() => showView('customer-home')}>🏠<span>Home</span></button>
                   <button className={`bnav-btn ${view === 'explore' ? 'active' : ''}`} onClick={() => { setStores([]); showView('explore'); }}>🔍<span>Explore</span></button>
                   <button className={`bnav-btn ${view === 'chat' ? 'active' : ''}`} onClick={() => showView('chat')}>💬<span>Chats</span></button>
+                  <button className={`bnav-btn ${view === 'my-orders' ? 'active' : ''}`} onClick={() => showView('my-orders')}>🧾<span>Orders</span></button>
                   <button className="bnav-btn" onClick={() => showToast('Profile coming soon!')}>👤<span>Profile</span></button>
                 </nav>
               )}
@@ -1629,6 +1734,7 @@ export default function App() {
                 <button className="bnav-btn" onClick={() => showView('customer-home')}>🏠<span>Home</span></button>
                 <button className="bnav-btn active">🔍<span>Explore</span></button>
                 <button className={`bnav-btn ${view === 'chat' ? 'active' : ''}`} onClick={() => showView('chat')}>💬<span>Chats</span></button>
+                <button className={`bnav-btn ${view === 'my-orders' ? 'active' : ''}`} onClick={() => showView('my-orders')}>🧾<span>Orders</span></button>
                 <button className="bnav-btn" onClick={() => showToast('Profile coming soon!')}>👤<span>Profile</span></button>
               </nav>
             </div>
@@ -1675,9 +1781,117 @@ export default function App() {
                 <button className="bnav-btn" onClick={() => showView('customer-home')}>🏠<span>Home</span></button>
                 <button className="bnav-btn" onClick={() => showView('explore')}>🔍<span>Explore</span></button>
                 <button className="bnav-btn active">💬<span>Chats</span></button>
+                <button className={`bnav-btn ${view === 'my-orders' ? 'active' : ''}`} onClick={() => showView('my-orders')}>🧾<span>Orders</span></button>
                 <button className="bnav-btn" onClick={() => showToast('Profile coming soon!')}>👤<span>Profile</span></button>
               </nav>
             )}
+          </div>
+        )}
+
+        {/* ═══════════════════════════════════════════════════════════
+            MY ORDERS (customer)
+        ═══════════════════════════════════════════════════════════ */}
+        {view === 'my-orders' && (
+          <div className="view active" style={{ minHeight:'100vh', background:'var(--bg)' }}>
+            <header className="app-header" style={{ flexWrap:'nowrap' }}>
+              <button className="back-btn sm" onClick={() => showView('customer-home')} aria-label="Go back">←</button>
+              <h2 style={{ flex:1, fontSize:'1.05rem', fontFamily:'Syne, sans-serif', margin:0 }}>🧾 My Orders</h2>
+            </header>
+
+            {myOrdersLoading ? (
+              <div style={{ display:'flex', justifyContent:'center', padding:'60px 0' }}><Spinner size={32} /></div>
+            ) : myOrders.length > 0 ? (
+              <div className="order-list" style={{ padding:14, display:'flex', flexDirection:'column', gap:12, paddingBottom:90 }}>
+                {myOrders.map(o => (
+                  <div key={o.id} className="order-card">
+                    <div className="order-card-top">
+                      {o.product_image
+                        ? <img src={o.product_image} alt={o.product_name} className="order-thumb" />
+                        : <div className="order-thumb placeholder">📦</div>}
+                      <div style={{ flex:1 }}>
+                        <div className="order-product-name">{o.product_name}</div>
+                        <div className="order-biz-name">from {o.business_name}</div>
+                        <div className="order-meta">Qty {o.quantity} · ₦{Number(o.total_price).toLocaleString()}</div>
+                      </div>
+                      <span className={`order-status status-${o.status.toLowerCase()}`}>{o.status}</span>
+                    </div>
+                    <div className="order-card-bottom">
+                      <span className="order-date">{new Date(o.created_at).toLocaleDateString('en-NG', { day:'numeric', month:'short', year:'numeric' })}</span>
+                      <button className="btn-ghost sm" onClick={() => openChat({ id: o.business_id, name: o.business_name })}>💬 Message Seller</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ textAlign:'center', padding:'60px 20px', color:'var(--text-muted)' }}>
+                <div style={{ fontSize:'3rem', marginBottom:12 }}>🧾</div>
+                <p style={{ fontWeight:600, marginBottom:6 }}>No orders yet</p>
+                <p style={{ fontSize:'0.83rem' }}>Items you buy will show up here.</p>
+                <button className="btn-primary sm" style={{ marginTop:16 }} onClick={() => { showView('explore'); handleMultiSearch(); }}>🔍 Discover Businesses</button>
+              </div>
+            )}
+
+            <nav className="bottom-nav">
+              <button className="bnav-btn" onClick={() => showView('customer-home')}>🏠<span>Home</span></button>
+              <button className="bnav-btn" onClick={() => showView('explore')}>🔍<span>Explore</span></button>
+              <button className="bnav-btn" onClick={() => showView('chat')}>💬<span>Chats</span></button>
+              <button className="bnav-btn active">🧾<span>Orders</span></button>
+              <button className="bnav-btn" onClick={() => showToast('Profile coming soon!')}>👤<span>Profile</span></button>
+            </nav>
+          </div>
+        )}
+
+        {/* ═══════════════════════════════════════════════════════════
+            BUSINESS ORDERS (incoming)
+        ═══════════════════════════════════════════════════════════ */}
+        {view === 'biz-orders' && userProfile && (
+          <div className="view active" style={{ minHeight:'100vh', background:'var(--bg)' }}>
+            <header className="app-header" style={{ flexWrap:'nowrap' }}>
+              <h2 style={{ flex:1, fontSize:'1.05rem', fontFamily:'Syne, sans-serif', margin:0 }}>🧾 Orders</h2>
+              <div className="avatar" onClick={() => setIsMenuOpen(true)} role="button" tabIndex={0}>{avatarLetter}</div>
+            </header>
+
+            {bizOrdersLoading ? (
+              <div style={{ display:'flex', justifyContent:'center', padding:'60px 0' }}><Spinner size={32} /></div>
+            ) : bizOrders.length > 0 ? (
+              <div className="order-list" style={{ padding:14, display:'flex', flexDirection:'column', gap:12, paddingBottom:90 }}>
+                {bizOrders.map(o => (
+                  <div key={o.id} className="order-card">
+                    <div className="order-card-top">
+                      {o.product_image
+                        ? <img src={o.product_image} alt={o.product_name} className="order-thumb" />
+                        : <div className="order-thumb placeholder">📦</div>}
+                      <div style={{ flex:1 }}>
+                        <div className="order-product-name">{o.product_name}</div>
+                        <div className="order-biz-name">buyer: {o.buyer_name}</div>
+                        <div className="order-meta">Qty {o.quantity} · ₦{Number(o.total_price).toLocaleString()}</div>
+                      </div>
+                      <span className={`order-status status-${o.status.toLowerCase()}`}>{o.status}</span>
+                    </div>
+                    <div className="order-card-bottom">
+                      <span className="order-date">{new Date(o.created_at).toLocaleDateString('en-NG', { day:'numeric', month:'short', year:'numeric' })}</span>
+                      <select
+                        className="order-status-select"
+                        value={o.status}
+                        onChange={e => handleUpdateOrderStatus(o.id, e.target.value)}
+                      >
+                        {['Pending','Confirmed','Shipped','Delivered','Cancelled'].map(s => (
+                          <option key={s} value={s}>{s}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ textAlign:'center', padding:'60px 20px', color:'var(--text-muted)' }}>
+                <div style={{ fontSize:'3rem', marginBottom:12 }}>🧾</div>
+                <p style={{ fontWeight:600, marginBottom:6 }}>No orders yet</p>
+                <p style={{ fontSize:'0.83rem' }}>Orders placed on your products will show up here.</p>
+              </div>
+            )}
+
+            <BizBottomNav active="biz-orders" />
           </div>
         )}
 
