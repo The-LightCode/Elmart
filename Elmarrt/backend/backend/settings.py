@@ -1,5 +1,3 @@
-
-
 """
 Django settings for backend project.
 
@@ -29,7 +27,7 @@ SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'django-insecure-s4!9)&#f1prdv%
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DJANGO_DEBUG', 'False') == 'True'
 
-ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '://onrender.com,localhost,127.0.0.1').split(',')
+ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '.onrender.com,localhost,127.0.0.1').split(',')
 
 
 # Application definition
@@ -164,6 +162,9 @@ CORS_ALLOWED_ORIGINS = [
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:5173",
     "https://elmart.onrender.com",
+    "https://elmart-ni79.vercel.app",
+    "https://elmart-six.vercel.app",
+    "https://el-mart.netlify.app",
 ]
 
 CORS_ALLOW_HEADERS = [
@@ -177,4 +178,3 @@ CORS_ALLOW_HEADERS = [
 
 # Tell Django to use our custom user model
 AUTH_USER_MODEL = 'api.User'
-
