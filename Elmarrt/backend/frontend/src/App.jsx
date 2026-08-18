@@ -149,9 +149,30 @@ export default function App() {
         setUserProfile(profile);
         setRole(resolvedRole);
         window.scrollTo(0, 0);
-        setView(resolvedRole === 'business' ? 'business-dash' : 'customer-home');
+        if (!window.location.pathname.startsWith('/store/')) {
+          setView(resolvedRole === 'business' ? 'business-dash' : 'customer-home');
+        }
       } catch {}
     }
+  }, []);
+
+  // ══════════════════════════════════════════════════════════════════════
+  //  PUBLIC STOREFRONT LINK (e.g. elmart-ni79.vercel.app/store/mama-ngozi-store)
+  //  Works with no login — this is the whole point of a shareable business URL.
+  // ══════════════════════════════════════════════════════════════════════
+  useEffect(() => {
+    const match = window.location.pathname.match(/^\/store\/([^/]+)\/?$/);
+    if (!match) return;
+    const slug = match[1];
+    (async () => {
+      try {
+        const r = await axios.get(`${API}/api/store/${slug}/`);
+        setViewingStore({ ...r.data, matched_products: r.data.products });
+        showView('view-store');
+      } catch {
+        showToast('Store not found. It may have moved or the link is incorrect.');
+      }
+    })();
   }, []);
 
   // ══════════════════════════════════════════════════════════════════════
@@ -1150,6 +1171,25 @@ export default function App() {
 
                 <div className="store-editor-grid">
                   <div className="editor-panel">
+                    {userProfile.slug && (
+                      <div className="store-link-box">
+                        <div>
+                          <div className="store-link-label">🔗 Your public store link</div>
+                          <div className="store-link-url">{`elmart-ni79.vercel.app/store/${userProfile.slug}`}</div>
+                        </div>
+                        <button
+                          className="btn-primary sm"
+                          onClick={() => {
+                            const url = `${window.location.origin}/store/${userProfile.slug}`;
+                            navigator.clipboard?.writeText(url)
+                              .then(() => showToast('📋 Store link copied!'))
+                              .catch(() => showToast(url));
+                          }}
+                        >
+                          Copy Link
+                        </button>
+                      </div>
+                    )}
                     <h3>Branding</h3>
                     <div className="form-group">
                       <label>Store Name</label>
@@ -1825,167 +1865,4 @@ export default function App() {
             ) : (
               <div style={{ textAlign:'center', padding:'60px 20px', color:'var(--text-muted)' }}>
                 <div style={{ fontSize:'3rem', marginBottom:12 }}>🧾</div>
-                <p style={{ fontWeight:600, marginBottom:6 }}>No orders yet</p>
-                <p style={{ fontSize:'0.83rem' }}>Items you buy will show up here.</p>
-                <button className="btn-primary sm" style={{ marginTop:16 }} onClick={() => { showView('explore'); handleMultiSearch(); }}>🔍 Discover Businesses</button>
-              </div>
-            )}
-
-            <nav className="bottom-nav">
-              <button className="bnav-btn" onClick={() => showView('customer-home')}>🏠<span>Home</span></button>
-              <button className="bnav-btn" onClick={() => showView('explore')}>🔍<span>Explore</span></button>
-              <button className="bnav-btn" onClick={() => showView('chat')}>💬<span>Chats</span></button>
-              <button className="bnav-btn active">🧾<span>Orders</span></button>
-              <button className="bnav-btn" onClick={() => showToast('Profile coming soon!')}>👤<span>Profile</span></button>
-            </nav>
-          </div>
-        )}
-
-        {/* ═══════════════════════════════════════════════════════════
-            BUSINESS ORDERS (incoming)
-        ═══════════════════════════════════════════════════════════ */}
-        {view === 'biz-orders' && userProfile && (
-          <div className="view active" style={{ minHeight:'100vh', background:'var(--bg)' }}>
-            <header className="app-header" style={{ flexWrap:'nowrap' }}>
-              <h2 style={{ flex:1, fontSize:'1.05rem', fontFamily:'Syne, sans-serif', margin:0 }}>🧾 Orders</h2>
-              <div className="avatar" onClick={() => setIsMenuOpen(true)} role="button" tabIndex={0}>{avatarLetter}</div>
-            </header>
-
-            {bizOrdersLoading ? (
-              <div style={{ display:'flex', justifyContent:'center', padding:'60px 0' }}><Spinner size={32} /></div>
-            ) : bizOrders.length > 0 ? (
-              <div className="order-list" style={{ padding:14, display:'flex', flexDirection:'column', gap:12, paddingBottom:90 }}>
-                {bizOrders.map(o => (
-                  <div key={o.id} className="order-card">
-                    <div className="order-card-top">
-                      {o.product_image
-                        ? <img src={o.product_image} alt={o.product_name} className="order-thumb" />
-                        : <div className="order-thumb placeholder">📦</div>}
-                      <div style={{ flex:1 }}>
-                        <div className="order-product-name">{o.product_name}</div>
-                        <div className="order-biz-name">buyer: {o.buyer_name}</div>
-                        <div className="order-meta">Qty {o.quantity} · ₦{Number(o.total_price).toLocaleString()}</div>
-                      </div>
-                      <span className={`order-status status-${o.status.toLowerCase()}`}>{o.status}</span>
-                    </div>
-                    <div className="order-card-bottom">
-                      <span className="order-date">{new Date(o.created_at).toLocaleDateString('en-NG', { day:'numeric', month:'short', year:'numeric' })}</span>
-                      <select
-                        className="order-status-select"
-                        value={o.status}
-                        onChange={e => handleUpdateOrderStatus(o.id, e.target.value)}
-                      >
-                        {['Pending','Confirmed','Shipped','Delivered','Cancelled'].map(s => (
-                          <option key={s} value={s}>{s}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div style={{ textAlign:'center', padding:'60px 20px', color:'var(--text-muted)' }}>
-                <div style={{ fontSize:'3rem', marginBottom:12 }}>🧾</div>
-                <p style={{ fontWeight:600, marginBottom:6 }}>No orders yet</p>
-                <p style={{ fontSize:'0.83rem' }}>Orders placed on your products will show up here.</p>
-              </div>
-            )}
-
-            <BizBottomNav active="biz-orders" />
-          </div>
-        )}
-
-        {/* ═══════════════════════════════════════════════════════════
-            CHAT OPEN
-        ═══════════════════════════════════════════════════════════ */}
-        {view === 'chat-open' && (
-          <div className="view active">
-            <div className="chat-open-shell">
-              <header className="chat-header">
-                <button
-                  className="back-btn sm"
-                  onClick={() => showView('chat')}
-                  aria-label="Back to messages"
-                  style={{ minWidth:36, minHeight:36, display:'flex', alignItems:'center', justifyContent:'center' }}
-                >←</button>
-                <div className="chat-header-avatar">{(activeChat.name || '?')[0].toUpperCase()}</div>
-                <div className="chat-header-info">
-                  <div className="chat-header-name">{activeChat.name || 'Unknown'}</div>
-                  <div className="chat-header-status">● Online</div>
-                </div>
-                <button className="icon-btn" onClick={() => showToast('Voice call coming soon!')} aria-label="Call">📞</button>
-              </header>
-
-              <div className="chat-messages">
-                {messages.length === 0 && (
-                  <div style={{ textAlign:'center', color:'var(--text-muted)', padding:'40px 20px', fontSize:'0.85rem' }}>
-                    Start the conversation! 👋
-                  </div>
-                )}
-                {messages.map((msg, i) => (
-                  <div key={msg.id || i} className={`msg ${msg.sender === userProfile?.id ? 'me' : 'them'}`}>
-                    <div className="msg-bubble">
-                      {msg.content || msg.text}
-                      <span className="msg-time">
-                        {msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString('en-NG', { hour:'2-digit', minute:'2-digit' }) : ''}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-                <div ref={chatEndRef} />
-              </div>
-
-              <div className="chat-input-bar">
-                <input
-                  type="text"
-                  placeholder="Type a message…"
-                  value={chatInput}
-                  onChange={e => setChatInput(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMessage()}
-                  aria-label="Message input"
-                />
-                <button className="send-btn" onClick={sendMessage} aria-label="Send message">➤</button>
-              </div>
-            </div>
-          </div>
-        )}
-
-      </div>{/* end #app */}
-
-      {/* ═══════════════════════════════════════════════════════════
-          FLOATING AI CHATBOT (always mounted)
-      ═══════════════════════════════════════════════════════════ */}
-      <div className="chatbot-floating-container">
-        {botOpen && (
-          <div className="chat-window" role="dialog" aria-label="AI Advisor">
-            <div className="chat-window-header">
-              <span>🤖 El-Mart Advisor</span>
-              <button onClick={() => setBotOpen(false)} style={{ background:'none', border:'none', color:'white', cursor:'pointer', fontSize:'1.1rem' }} aria-label="Close chatbot">✕</button>
-            </div>
-            <div className="chat-window-messages">
-              {botMessages.map((msg, i) => (
-                <div key={i} className={`bot-msg ${msg.sender === 'user' ? 'bot-msg-user' : 'bot-msg-bot'}`}>{msg.text}</div>
-              ))}
-              {botLoading && <div className="bot-msg bot-msg-bot" style={{ fontStyle:'italic' }}>Thinking… ⏳</div>}
-              <div ref={botEndRef} />
-            </div>
-            <div className="chat-window-input">
-              <input
-                type="text"
-                placeholder="e.g. Is ₦45k fair for iPhone 11?"
-                value={botInput}
-                onChange={e => setBotInput(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && askBot()}
-                aria-label="Ask AI"
-              />
-              <button onClick={askBot} disabled={botLoading}>{botLoading ? '…' : 'Send'}</button>
-            </div>
-          </div>
-        )}
-        <button className="chat-toggle-btn" onClick={() => setBotOpen(p => !p)} title="AI Advisor" aria-label="Toggle AI advisor">
-          {botOpen ? '✕' : '🤖'}
-        </button>
-      </div>
-    </>
-  );
-}
+                <p style={{ fontWeig
