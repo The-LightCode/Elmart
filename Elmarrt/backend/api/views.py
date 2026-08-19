@@ -31,7 +31,7 @@ from django.db.models import Case, When, Value, IntegerField
 # api/views.py
 from .models import User, Product, Message, Subscriber, Order, Post  # <--- Add Subscriber here!
 import math
-from .serializers import ProductSerializer, OrderSerializer, PostSerializer
+from .serializers import ProductSerializer, OrderSerializer, PostSerializer, PublicStoreSerializer
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
@@ -457,6 +457,21 @@ class BusinessDashboardStatsView(APIView):
             "pendingOrderCount": Order.objects.filter(product__business=user, status='Pending').count(),
         })
 
+class PublicStoreView(APIView):
+    """
+    Public, no-login storefront — this is what elmart.com/store/<slug>/ resolves to.
+    Anyone with the link can view it, including people who've never signed up.
+    """
+    permission_classes = [AllowAny]
+
+    def get(self, request, slug):
+        business = get_object_or_404(User, slug=slug, is_business=True)
+        business.view_count = models.F('view_count') + 1
+        business.save(update_fields=['view_count'])
+        business.refresh_from_db(fields=['view_count'])
+        return Response(PublicStoreSerializer(business).data)
+
+
 class CreateOrderView(generics.CreateAPIView):
     """Customer places an order (checkout) for a product."""
     serializer_class = OrderSerializer
@@ -523,3 +538,4 @@ class MessageViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         # Automatically set the sender to the logged-in user
         serializer.save(sender=self.request.user)
+

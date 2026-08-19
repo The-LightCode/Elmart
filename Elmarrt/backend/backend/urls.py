@@ -69,5 +69,7 @@ urlpatterns = [
     path('api/orders/<int:order_id>/status/', views.update_order_status, name='update_order_status'),
 
     path('api/dashboard-stats/', views.BusinessDashboardStatsView.as_view(), name='dashboard_stats'),
+    path('api/store/<slug:slug>/', views.PublicStoreView.as_view(), name='public_store'),
 
 ]+ static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+

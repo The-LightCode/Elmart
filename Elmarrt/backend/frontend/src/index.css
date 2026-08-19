@@ -956,3 +956,16 @@ textarea:focus-visible {
 .post-action.buy { color: var(--orange); }
 .post-action.buy:hover { background: rgba(255,107,53,.1); }
 .post-action.disabled { opacity: .55; pointer-events: none; }
+
+/* ── Public storefront link box (Store Customiser page) ────── */
+.store-link-box {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  background: linear-gradient(135deg, rgba(255,107,53,.08), rgba(18,33,66,.06));
+  border: 1px dashed var(--orange);
+  border-radius: var(--radius-sm);
+  padding: 12px 16px;
+  margin-bottom: 18px;
+}
+.store-link-label { font-size: .78rem; font-weight: 700; color: var(--navy); }
+.store-link-url { font-size: .85rem; color: var(--orange); font-weight: 600; margin-top: 2px; word-break: break-all; }
+

@@ -1,6 +1,7 @@
 from django.contrib.auth.models import AbstractUser
 from django.db import models
 from django.conf import settings
+from django.utils.text import slugify
 
 class User(AbstractUser):
     # This is the "Level Playing Field" logic
@@ -33,6 +34,22 @@ class User(AbstractUser):
 
     # Simple page-view counter for the business dashboard stats.
     view_count = models.PositiveIntegerField(default=0)
+
+    # Public storefront URL, e.g. elmart.com/store/mama-ngozi-store
+    # Nullable so it never blocks existing rows; auto-filled on save() below.
+    slug = models.SlugField(max_length=140, unique=True, blank=True, null=True)
+
+    def save(self, *args, **kwargs):
+        if not self.slug and self.business_name:
+            base = slugify(self.business_name)[:120] or f"store-{self.pk or 'new'}"
+            candidate = base
+            i = 2
+            # Ensure uniqueness without colliding with another business's slug
+            while User.objects.filter(slug=candidate).exclude(pk=self.pk).exists():
+                candidate = f"{base}-{i}"
+                i += 1
+            self.slug = candidate
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return self.email if self.email else self.username
@@ -124,3 +141,7 @@ class Post(models.Model):
 
     def __str__(self):
         return self.title
+                                
+
+
+

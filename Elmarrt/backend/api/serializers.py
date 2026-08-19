@@ -33,7 +33,27 @@ User = get_user_model()
 class BusinessProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ['business_name', 'tagline', 'description', 'business_category', 'location_state', 'phone_number',  'latitude', 'longitude']
+        fields = ['business_name', 'tagline', 'description', 'business_category', 'location_state', 'phone_number',  'latitude', 'longitude', 'slug']
+        read_only_fields = ['slug']
+
+
+class PublicStoreSerializer(serializers.ModelSerializer):
+    """Public-facing storefront — no auth required, safe to expose via shareable link."""
+    products = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = ['id', 'business_name', 'tagline', 'description', 'business_category',
+                   'location_state', 'slug', 'products']
+
+    def get_products(self, obj):
+        return [
+            {
+                'id': p.id, 'name': p.name, 'price': str(p.price),
+                'stock': p.stock, 'image': p.image.url if p.image else None,
+            }
+            for p in obj.products.all()
+        ]
 
 class MessageSerializer(serializers.ModelSerializer):
     sender_email = serializers.ReadOnlyField(source='sender.email')
