@@ -18,8 +18,8 @@ class ProductSerializer(serializers.ModelSerializer):
     class Meta:
         model = Product
         # Added 'media' to the list so it actually sends to the frontend
-        fields = ['id', 'name', 'price', 'stock', 'image', 'media']
-        read_only_fields = ['business']
+        fields = ['id', 'name', 'price', 'stock', 'image', 'media', 'is_featured', 'featured_until']
+        read_only_fields = ['business', 'is_featured', 'featured_until']
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
@@ -33,8 +33,8 @@ User = get_user_model()
 class BusinessProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ['business_name', 'tagline', 'description', 'business_category', 'location_state', 'phone_number',  'latitude', 'longitude', 'slug']
-        read_only_fields = ['slug']
+        fields = ['business_name', 'tagline', 'description', 'business_category', 'location_state', 'phone_number',  'latitude', 'longitude', 'slug', 'bank_name', 'account_name', 'has_physical_outlet', 'street_address']
+        read_only_fields = ['slug', 'bank_name', 'account_name']
 
 
 class PublicStoreSerializer(serializers.ModelSerializer):
@@ -44,7 +44,8 @@ class PublicStoreSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ['id', 'business_name', 'tagline', 'description', 'business_category',
-                   'location_state', 'slug', 'products']
+                   'location_state', 'slug', 'products',
+                   'has_physical_outlet', 'street_address', 'latitude', 'longitude']
 
     def get_products(self, obj):
         return [
@@ -72,7 +73,8 @@ class BusinessDiscoverySerializer(serializers.ModelSerializer):
         fields = [
             'id', 'business_name', 'business_category',
             'location_state', 'tagline', 'description',
-            'latitude', 'longitude', 'matched_products'
+            'latitude', 'longitude', 'has_physical_outlet',
+            'street_address', 'matched_products'
         ]
 
     def get_matched_products(self, obj):
@@ -98,9 +100,9 @@ class OrderSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'product', 'product_name', 'product_image',
             'business_id', 'business_name', 'user', 'buyer_name',
-            'quantity', 'status', 'total_price', 'created_at', 'updated_at',
+            'quantity', 'status', 'total_price', 'is_paid', 'created_at', 'updated_at',
         ]
-        read_only_fields = ['user', 'status', 'created_at', 'updated_at']
+        read_only_fields = ['user', 'status', 'is_paid', 'created_at', 'updated_at']
 
     def get_product_image(self, obj):
         request = self.context.get('request')

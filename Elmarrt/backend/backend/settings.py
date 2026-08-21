@@ -1,3 +1,4 @@
+
 """
 Django settings for backend project.
 
@@ -178,3 +179,24 @@ CORS_ALLOW_HEADERS = [
 
 # Tell Django to use our custom user model
 AUTH_USER_MODEL = 'api.User'
+
+# ── El-Mart business rules ──────────────────────────────────────────────
+# % of every order's value El-Mart keeps as commission; the rest settles
+# straight to the seller's own bank account via their Paystack subaccount.
+PLATFORM_COMMISSION_PERCENT = 7
+
+# Featured-listing ("boost") pricing — 100% platform revenue.
+FEATURE_BOOST_PRICES = {
+    7: 2000,    # 7 days for ₦2,000
+    30: 6000,   # 30 days for ₦6,000
+}
+
+# ── Logistics (Terminal Africa) ─────────────────────────────────────────
+TERMINAL_API_KEY = os.environ.get('TERMINAL_API_KEY', '')
+# El-Mart's default packaging ID on Terminal's platform — get this from your
+# Terminal dashboard/Postman collection (Packaging endpoints) after signing up.
+TERMINAL_DEFAULT_PACKAGING_ID = os.environ.get('TERMINAL_DEFAULT_PACKAGING_ID', '')
+# % markup added on top of Terminal's real delivery cost — this is El-Mart's
+# delivery-fee revenue line from the handbook.
+DELIVERY_MARKUP_PERCENT = 12
+
