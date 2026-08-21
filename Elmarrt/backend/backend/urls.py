@@ -71,5 +71,21 @@ urlpatterns = [
     path('api/dashboard-stats/', views.BusinessDashboardStatsView.as_view(), name='dashboard_stats'),
     path('api/store/<slug:slug>/', views.PublicStoreView.as_view(), name='public_store'),
 
+    # Payments (Paystack)
+    path('api/payments/initialize/', views.InitializePaymentView.as_view(), name='initialize_payment'),
+    path('api/payments/verify/<str:reference>/', views.VerifyPaymentView.as_view(), name='verify_payment'),
+
+    # Payouts — business bank/subaccount setup
+    path('api/payouts/banks/', views.ListBanksView.as_view(), name='list_banks'),
+    path('api/payouts/setup/', views.SetupPayoutAccountView.as_view(), name='setup_payout'),
+
+    # Featured listings ("pure software" revenue)
+    path('api/boost/initialize/', views.InitializeBoostPaymentView.as_view(), name='initialize_boost'),
+
+    # Logistics (Terminal Africa)
+    path('api/shipping/rates/', views.GetShippingRatesView.as_view(), name='shipping_rates'),
+    path('api/shipping/select/', views.SelectShipmentRateView.as_view(), name='select_shipment'),
+    path('api/shipping/track/<int:order_id>/', views.TrackShipmentView.as_view(), name='track_shipment'),
+
 ]+ static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
