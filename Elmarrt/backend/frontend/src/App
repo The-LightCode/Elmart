@@ -66,25 +66,6 @@ export default function App() {
   const [bizOrdersLoading, setBizOrdersLoading] = useState(false);
   const [orderingId, setOrderingId]     = useState(null); // product id currently being ordered (disables its button)
 
-  // ── Payouts (business bank account) ────────────────────────────────────────
-  const [banks, setBanks]               = useState([]);
-  const [banksLoading, setBanksLoading] = useState(false);
-  const [payoutForm, setPayoutForm]     = useState({ bank_code:'', bank_name:'', account_number:'' });
-  const [payoutLoading, setPayoutLoading] = useState(false);
-
-  // ── Featured listing boosts ─────────────────────────────────────────────────
-  const [boostingProductId, setBoostingProductId] = useState(null); // product currently showing the day-picker
-  const BOOST_PRICES = { 7: 2000, 30: 6000 };
-
-  // ── Checkout / delivery (logistics) ─────────────────────────────────────────
-  const [checkoutOrder, setCheckoutOrder]   = useState(null);  // order awaiting a delivery choice + payment
-  const [deliveryForm, setDeliveryForm]     = useState({ address:'', city:'', state:'' });
-  const [shippingRates, setShippingRates]   = useState([]);
-  const [ratesLoading, setRatesLoading]     = useState(false);
-  const [selectedRate, setSelectedRate]     = useState(null);
-  const [bookingLoading, setBookingLoading] = useState(false);
-  const [trackingInfo, setTrackingInfo]     = useState({}); // { [orderId]: {status, tracking_number, ...} }
-
   // ── Social feed ─────────────────────────────────────────────────────────────
   const [posts, setPosts]           = useState([]);
   const [feedLoading, setFeedLoading] = useState(false);
@@ -195,30 +176,6 @@ export default function App() {
   }, []);
 
   // ══════════════════════════════════════════════════════════════════════
-  //  PAYMENT CALLBACK — Paystack redirects here after checkout
-  // ══════════════════════════════════════════════════════════════════════
-  useEffect(() => {
-    if (window.location.pathname !== '/payment-callback') return;
-    const params = new URLSearchParams(window.location.search);
-    const reference = params.get('reference') || params.get('trxref');
-    if (!reference || !token()) {
-      showView('my-orders');
-      return;
-    }
-    (async () => {
-      try {
-        const r = await axios.get(`${API}/api/payments/verify/${reference}/`, authH());
-        showToast(r.data.status === 'success' ? '✅ Payment successful!' : 'Payment was not completed.');
-      } catch {
-        showToast('Could not confirm payment. Check My Orders for its status.');
-      } finally {
-        window.history.replaceState({}, '', '/'); // clean the URL up
-        showView('my-orders');
-      }
-    })();
-  }, []);
-
-  // ══════════════════════════════════════════════════════════════════════
   //  SEARCH / EXPLORE (defined here, above the effect below, so that the
   //  effect's dependency array doesn't reference it before it's initialized)
   // ══════════════════════════════════════════════════════════════════════
@@ -260,8 +217,7 @@ export default function App() {
     if (view === 'explore' && stores.length === 0) handleMultiSearch();
     if (view === 'my-orders') fetchMyOrders();
     if (view === 'biz-orders') fetchBusinessOrders();
-    if (view === 'settings' && activeSettingTab === 'finance' && banks.length === 0) fetchBanks();
-  }, [view, handleMultiSearch, activeSettingTab]);
+  }, [view, handleMultiSearch]);
 
   useEffect(() => { if (userProfile) fetchNotifications(); }, [userProfile]);
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior:'smooth' }); }, [messages]);
@@ -470,11 +426,7 @@ export default function App() {
         business_category: userProfile.business_category,
         tagline: userProfile.tagline,
         description: userProfile.description,
-        location_state: userProfile.location_state,
-        has_physical_outlet: userProfile.has_physical_outlet,
-        street_address: userProfile.street_address,
-        latitude: userProfile.latitude,
-        longitude: userProfile.longitude,
+        location_state: userProfile.location_state
       }, authH());
       const updated = { ...userProfile, ...r.data };
       setUserProfile(updated);
@@ -597,19 +549,6 @@ export default function App() {
   //  FOLLOW
   // ══════════════════════════════════════════════════════════════════════
 
-  const handleCapturePreciseLocation = () => {
-    if (!navigator.geolocation) return showToast('Your browser doesn\'t support location — enter coordinates manually via support.');
-    showToast('📍 Getting your location…');
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setUserProfile(p => ({ ...p, latitude: pos.coords.latitude, longitude: pos.coords.longitude }));
-        showToast('Location captured! Tap "Save Branding" below to confirm.');
-      },
-      () => showToast('Could not get your location. Check location permissions and try again.'),
-      { enableHighAccuracy: true, timeout: 10000 }
-    );
-  };
-
   const handleFollow = async (bizId, bizName) => {
     try {
       const r = await axios.post(`${API}/api/follow/${bizId}/`, {}, authH());
@@ -623,28 +562,12 @@ export default function App() {
   //  ORDERS
   // ══════════════════════════════════════════════════════════════════════
 
-  const initializePayment = async (orderId) => {
-    try {
-      const r = await axios.post(`${API}/api/payments/initialize/`, {
-        order_id: orderId,
-        callback_url: `${window.location.origin}/payment-callback`,
-      }, authH());
-      window.location.href = r.data.authorization_url; // hands off to Paystack's checkout page
-    } catch (err) {
-      showToast(err.response?.data?.error || 'Could not start payment. Try again.');
-    }
-  };
-
   const handlePlaceOrder = async (productId, productName) => {
     if (!token()) return showToast('Please log in to place an order.');
     setOrderingId(productId);
     try {
-      const r = await axios.post(`${API}/api/orders/`, { product: productId, quantity: 1 }, authH());
-      setCheckoutOrder(r.data);
-      setShippingRates([]);
-      setSelectedRate(null);
-      setDeliveryForm({ address:'', city:'', state:'' });
-      showView('checkout-delivery');
+      await axios.post(`${API}/api/orders/`, { product: productId, quantity: 1 }, authH());
+      showToast(`🛒 Order placed for ${productName}!`);
     } catch (err) {
       const msg = err.response?.data?.product?.[0] || err.response?.data?.quantity?.[0] || 'Could not place order. Try again.';
       showToast(msg);
@@ -653,65 +576,11 @@ export default function App() {
     }
   };
 
-  const fetchShippingRates = async () => {
-    if (!deliveryForm.address || !deliveryForm.city) {
-      return showToast('Enter your delivery address and city first.');
-    }
-    setRatesLoading(true);
-    setShippingRates([]);
-    try {
-      const r = await axios.post(`${API}/api/shipping/rates/`, {
-        order_id: checkoutOrder.id,
-        delivery_address: deliveryForm.address,
-        delivery_city: deliveryForm.city,
-        delivery_state: deliveryForm.state || deliveryForm.city,
-      }, authH());
-      setShippingRates(r.data.rates || []);
-      if (!r.data.rates?.length) showToast('No courier options found for this address yet.');
-    } catch (err) {
-      showToast(err.response?.data?.error || 'Could not fetch delivery options.');
-    } finally {
-      setRatesLoading(false);
-    }
-  };
-
-  const handleChooseRateAndPay = async () => {
-    if (!selectedRate) return showToast('Choose a delivery option first.');
-    setBookingLoading(true);
-    try {
-      await axios.post(`${API}/api/shipping/select/`, {
-        order_id: checkoutOrder.id,
-        rate_id: selectedRate.rate_id,
-        charged_amount: selectedRate.charged_amount,
-      }, authH());
-      await initializePayment(checkoutOrder.id); // this now includes the delivery fee automatically
-    } catch (err) {
-      showToast(err.response?.data?.error || 'Could not proceed to payment.');
-    } finally {
-      setBookingLoading(false);
-    }
-  };
-
-  const skipDeliveryAndPay = async () => {
-    await initializePayment(checkoutOrder.id); // customer/business will arrange delivery themselves
-  };
-
-  const fetchTracking = async (orderId) => {
-    try {
-      const r = await axios.get(`${API}/api/shipping/track/${orderId}/`, authH());
-      setTrackingInfo(t => ({ ...t, [orderId]: r.data }));
-    } catch {
-      // no shipment booked yet for this order — fine, just don't show a tracking panel
-    }
-  };
-
   const fetchMyOrders = async () => {
     setMyOrdersLoading(true);
     try {
       const r = await axios.get(`${API}/api/orders/mine/`, authH());
-      const list = Array.isArray(r.data) ? r.data : [];
-      setMyOrders(list);
-      list.filter(o => o.is_paid).forEach(o => fetchTracking(o.id));
+      setMyOrders(Array.isArray(r.data) ? r.data : []);
     } catch {
       setMyOrders([]);
     } finally {
@@ -723,9 +592,7 @@ export default function App() {
     setBizOrdersLoading(true);
     try {
       const r = await axios.get(`${API}/api/orders/business/`, authH());
-      const list = Array.isArray(r.data) ? r.data : [];
-      setBizOrders(list);
-      list.filter(o => o.is_paid).forEach(o => fetchTracking(o.id));
+      setBizOrders(Array.isArray(r.data) ? r.data : []);
     } catch {
       setBizOrders([]);
     } finally {
@@ -740,54 +607,6 @@ export default function App() {
       showToast(`Order #${orderId} marked ${newStatus}`);
     } catch {
       showToast('Could not update order status.');
-    }
-  };
-
-  // ══════════════════════════════════════════════════════════════════════
-  //  PAYOUTS — business bank account for split-payment settlement
-  // ══════════════════════════════════════════════════════════════════════
-
-  const fetchBanks = async () => {
-    setBanksLoading(true);
-    try {
-      const r = await axios.get(`${API}/api/payouts/banks/`, authH());
-      setBanks(Array.isArray(r.data) ? r.data : []);
-    } catch {
-      showToast('Could not load bank list. Check your connection.');
-    } finally {
-      setBanksLoading(false);
-    }
-  };
-
-  const handleSetupPayout = async () => {
-    if (!payoutForm.bank_code || !payoutForm.account_number) {
-      return showToast('Select a bank and enter your account number.');
-    }
-    setPayoutLoading(true);
-    try {
-      const r = await axios.post(`${API}/api/payouts/setup/`, payoutForm, authH());
-      showToast(r.data.message || '✅ Payout account set up!');
-      setUserProfile(p => ({ ...p, account_name: r.data.account_name }));
-    } catch (err) {
-      showToast(err.response?.data?.error || 'Could not verify that account. Double-check the details.');
-    } finally {
-      setPayoutLoading(false);
-    }
-  };
-
-  // ══════════════════════════════════════════════════════════════════════
-  //  FEATURED LISTINGS ("pure software" revenue)
-  // ══════════════════════════════════════════════════════════════════════
-
-  const handleBoostProduct = async (productId, days) => {
-    try {
-      const r = await axios.post(`${API}/api/boost/initialize/`, {
-        product_id: productId, days,
-        callback_url: `${window.location.origin}/payment-callback`,
-      }, authH());
-      window.location.href = r.data.authorization_url;
-    } catch (err) {
-      showToast(err.response?.data?.error || 'Could not start boost payment.');
     }
   };
 
@@ -1296,7 +1115,6 @@ export default function App() {
                           <th>Price</th>
                           <th>Stock</th>
                           <th>Status</th>
-                          <th>Featured</th>
                           <th>Actions</th>
                         </tr>
                       </thead>
@@ -1310,22 +1128,6 @@ export default function App() {
                               <span className={`stock-count ${p.stock <= 0 ? 'danger' : p.stock < 5 ? 'warn' : 'good'}`}>
                                 {p.stock <= 0 ? 'Out of stock' : p.stock < 5 ? 'Low stock' : 'In stock'}
                               </span>
-                            </td>
-                            <td>
-                              {p.is_featured ? (
-                                <span className="featured-badge">⭐ Featured</span>
-                              ) : boostingProductId === p.id ? (
-                                <div className="boost-picker">
-                                  {Object.entries(BOOST_PRICES).map(([days, price]) => (
-                                    <button key={days} className="btn-primary xs" onClick={() => handleBoostProduct(p.id, Number(days))}>
-                                      {days}d · ₦{price.toLocaleString()}
-                                    </button>
-                                  ))}
-                                  <button className="btn-ghost xs" onClick={() => setBoostingProductId(null)}>Cancel</button>
-                                </div>
-                              ) : (
-                                <button className="btn-ghost xs" onClick={() => setBoostingProductId(p.id)}>🚀 Boost</button>
-                              )}
                             </td>
                             <td>
                               <button className="btn-ghost xs" onClick={() => showToast('Edit coming soon!')}>Edit</button>
@@ -1410,43 +1212,6 @@ export default function App() {
                         {NG_STATES.map(s => <option key={s}>{s}</option>)}
                       </select>
                     </div>
-
-                    <div className="form-check outlet-toggle">
-                      <input
-                        type="checkbox" id="outlet-toggle"
-                        checked={!!userProfile.has_physical_outlet}
-                        onChange={e => setUserProfile({ ...userProfile, has_physical_outlet: e.target.checked })}
-                      />
-                      <label htmlFor="outlet-toggle">I have a physical shop/outlet customers can visit</label>
-                    </div>
-
-                    {userProfile.has_physical_outlet && (
-                      <div className="outlet-location-box">
-                        <div className="form-group">
-                          <label>Shop Address</label>
-                          <input
-                            type="text" placeholder="e.g. Shop 14, Balogun Market, Lagos Island"
-                            value={userProfile.street_address || ''}
-                            onChange={e => setUserProfile({ ...userProfile, street_address: e.target.value })}
-                          />
-                        </div>
-                        {userProfile.latitude && userProfile.longitude ? (
-                          <div className="location-confirmed">
-                            📍 Precise location set — customers will see exactly where to find you.
-                            <button className="btn-ghost xs" onClick={handleCapturePreciseLocation} style={{ marginLeft:8 }}>Update</button>
-                          </div>
-                        ) : (
-                          <button className="btn-primary sm" onClick={handleCapturePreciseLocation}>
-                            📍 Pin My Exact Location
-                          </button>
-                        )}
-                        <p className="settings-hint">
-                          This drops a precise map pin, more accurate than just your state — it's what makes
-                          your storefront show up conspicuously as a real, visitable shop to nearby customers.
-                        </p>
-                      </div>
-                    )}
-
                     <h3>Store Info</h3>
                     <div className="form-group">
                       <label>About Your Store</label>
@@ -1540,49 +1305,10 @@ export default function App() {
                       {activeSettingTab === 'finance' && (
                         <div className="settings-pane">
                           <h3>Finance & Payouts</h3>
-                          {userProfile.account_name ? (
-                            <div className="payout-status-box">
-                              ✅ Payouts are set up — sales settle automatically to
-                              <b> {userProfile.account_name}</b> ({userProfile.bank_name || 'bank on file'}),
-                              minus El-Mart's commission. Update below if your account has changed.
-                            </div>
-                          ) : (
-                            <div className="payout-status-box warn">
-                              ⚠️ No payout account yet — until this is set up, sales you receive stay
-                              with El-Mart and need to be paid out to you manually. Add your bank details
-                              below to receive money automatically for every future sale.
-                            </div>
-                          )}
-
-                          <div className="form-group">
-                            <label>Bank</label>
-                            <select
-                              value={payoutForm.bank_code}
-                              onChange={e => {
-                                const bank = banks.find(b => b.code === e.target.value);
-                                setPayoutForm({ ...payoutForm, bank_code: e.target.value, bank_name: bank?.name || '' });
-                              }}
-                              disabled={banksLoading}
-                            >
-                              <option value="">{banksLoading ? 'Loading banks…' : 'Select your bank'}</option>
-                              {banks.map(b => <option key={b.code} value={b.code}>{b.name}</option>)}
-                            </select>
-                          </div>
-                          <div className="form-group">
-                            <label>Account Number</label>
-                            <input
-                              type="text" placeholder="10-digit account number" maxLength={10}
-                              value={payoutForm.account_number}
-                              onChange={e => setPayoutForm({ ...payoutForm, account_number: e.target.value.replace(/\D/g,'') })}
-                            />
-                          </div>
-                          <button className="btn-primary" disabled={payoutLoading} onClick={handleSetupPayout}>
-                            {payoutLoading ? '⏳ Verifying…' : 'Verify & Save Payout Details'}
-                          </button>
-                          <p className="settings-hint">
-                            We verify this is a real account with your bank before saving — no money moves
-                            until your first sale.
-                          </p>
+                          <div className="form-group"><label>Bank Name</label><input type="text" placeholder="e.g. First Bank Nigeria" /></div>
+                          <div className="form-group"><label>Account Number</label><input type="text" placeholder="10-digit account number" /></div>
+                          <div className="form-group"><label>Account Name</label><input type="text" placeholder="Account holder name" /></div>
+                          <button className="btn-primary" onClick={() => showToast('Bank details saved!')}>Save Payout Details</button>
                         </div>
                       )}
                     </div>
@@ -1687,31 +1413,10 @@ export default function App() {
                         <div>
                           <div className="store-hero-name">{storeName}</div>
                           <div className="store-hero-cat">{storeCat} · {stateLoc}</div>
-                          <span className={`outlet-badge ${storeData?.has_physical_outlet ? 'physical' : 'remote'}`}>
-                            {storeData?.has_physical_outlet ? '🏪 Physical Outlet' : '💻 Remote / Online Only'}
-                          </span>
                         </div>
                       </div>
                     </div>
                   </div>
-
-                  {storeData?.has_physical_outlet && (
-                    <div className="outlet-address-banner">
-                      <div>
-                        <div className="outlet-address-label">📍 Visit us at</div>
-                        <div className="outlet-address-text">{storeData?.street_address || `${stateLoc}, Nigeria`}</div>
-                      </div>
-                      {storeData?.latitude && storeData?.longitude && (
-                        <a
-                          className="btn-primary sm"
-                          href={`https://www.google.com/maps?q=${storeData.latitude},${storeData.longitude}`}
-                          target="_blank" rel="noreferrer"
-                        >
-                          Get Directions →
-                        </a>
-                      )}
-                    </div>
-                  )}
 
                   <div className="store-action-bar">
                     <button className="btn-primary sm" onClick={() => openChat({ id: storeData?.id, name: storeName })}>💬 Chat</button>
@@ -1890,7 +1595,7 @@ export default function App() {
                           <img src={post.image.startsWith('http') ? post.image : `${API}${post.image}`} alt={post.name} style={{ width:'100%', objectFit:'cover' }} />
                         </div>
                       )}
-                      <div className="post-body">{post.is_featured && <span className="featured-badge">⭐ Featured</span>} {post.name}</div>
+                      <div className="post-body">{post.name}</div>
                       <div className="post-product-bar">
                         <span className="post-price">₦{Number(post.price).toLocaleString()}</span>
                         <span className={`post-stock ${post.stock > 0 ? 'in' : 'out'}`}>{post.stock > 0 ? `${post.stock} in stock` : 'Out of stock'}</span>
@@ -1933,12 +1638,7 @@ export default function App() {
                       <div className="store-card-avatar">{(s.business_name||'B')[0]}</div>
                       <div className="store-card-info">
                         <div className="store-card-name">{s.business_name}</div>
-                        <div className="store-card-meta">
-                          {s.business_category} {s.distance_km ? `· ${s.distance_km}km` : ''}
-                          {' '}<span className={`outlet-badge mini ${s.has_physical_outlet ? 'physical' : 'remote'}`}>
-                            {s.has_physical_outlet ? '🏪 Physical' : '💻 Remote'}
-                          </span>
-                        </div>
+                        <div className="store-card-meta">{s.business_category} {s.distance_km ? `· ${s.distance_km}km` : ''}</div>
                       </div>
                     </div>
                   )) : (
@@ -2050,9 +1750,6 @@ export default function App() {
                             )}
                           </div>
                           <div className="result-meta">{store.business_category || 'General'} · {store.location_state || 'Nigeria'}</div>
-                          <span className={`outlet-badge ${store.has_physical_outlet ? 'physical' : 'remote'}`} style={{ marginTop:4, marginBottom:6 }}>
-                            {store.has_physical_outlet ? '🏪 Physical Outlet' : '💻 Remote / Online Only'}
-                          </span>
                           {store.tagline && <div className="result-tagline">"{store.tagline}"</div>}
                           {store.matched_products?.length > 0 && (
                             <div className="result-products">
@@ -2132,68 +1829,6 @@ export default function App() {
         )}
 
         {/* ═══════════════════════════════════════════════════════════
-            CHECKOUT — DELIVERY DETAILS
-        ═══════════════════════════════════════════════════════════ */}
-        {view === 'checkout-delivery' && checkoutOrder && (
-          <div className="view active" style={{ minHeight:'100vh', background:'var(--bg)' }}>
-            <header className="app-header" style={{ flexWrap:'nowrap' }}>
-              <button className="back-btn sm" onClick={() => showView('customer-home')} aria-label="Go back">←</button>
-              <h2 style={{ flex:1, fontSize:'1.05rem', fontFamily:'Syne, sans-serif', margin:0 }}>🚚 Delivery Details</h2>
-            </header>
-
-            <div style={{ padding:16, paddingBottom:100 }}>
-              <div className="order-card" style={{ marginBottom:18 }}>
-                <div className="order-product-name">{checkoutOrder.product_name}</div>
-                <div className="order-meta">₦{Number(checkoutOrder.total_price).toLocaleString()}</div>
-              </div>
-
-              <div className="form-group"><label>Delivery Address</label>
-                <input type="text" placeholder="e.g. 12 Allen Avenue, Ikeja" value={deliveryForm.address}
-                  onChange={e => setDeliveryForm({ ...deliveryForm, address: e.target.value })} />
-              </div>
-              <div className="form-group"><label>City</label>
-                <input type="text" placeholder="e.g. Lagos" value={deliveryForm.city}
-                  onChange={e => setDeliveryForm({ ...deliveryForm, city: e.target.value })} />
-              </div>
-              <button className="btn-primary sm" disabled={ratesLoading} onClick={fetchShippingRates} style={{ marginBottom:16 }}>
-                {ratesLoading ? '⏳ Finding couriers…' : '🔍 Get Delivery Options'}
-              </button>
-
-              {shippingRates.length > 0 && (
-                <div style={{ display:'flex', flexDirection:'column', gap:8, marginBottom:20 }}>
-                  {shippingRates.map(rate => (
-                    <div
-                      key={rate.rate_id}
-                      className={`rate-option ${selectedRate?.rate_id === rate.rate_id ? 'selected' : ''}`}
-                      onClick={() => setSelectedRate(rate)}
-                      role="button" tabIndex={0}
-                    >
-                      <div>
-                        <div className="rate-carrier">{rate.carrier_name}</div>
-                        <div className="rate-time">{rate.delivery_time}</div>
-                      </div>
-                      <div className="rate-price">₦{Number(rate.charged_amount).toLocaleString()}</div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              <button
-                className="btn-primary"
-                style={{ width:'100%' }}
-                disabled={bookingLoading || !selectedRate}
-                onClick={handleChooseRateAndPay}
-              >
-                {bookingLoading ? '⏳ Preparing payment…' : selectedRate ? `💳 Pay ₦${Number(Number(checkoutOrder.total_price) + Number(selectedRate.charged_amount)).toLocaleString()}` : 'Choose a delivery option above'}
-              </button>
-              <button className="btn-ghost sm" style={{ width:'100%', marginTop:10 }} onClick={skipDeliveryAndPay}>
-                Skip — I'll arrange delivery myself
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* ═══════════════════════════════════════════════════════════
             MY ORDERS (customer)
         ═══════════════════════════════════════════════════════════ */}
         {view === 'my-orders' && (
@@ -2216,209 +1851,18 @@ export default function App() {
                       <div style={{ flex:1 }}>
                         <div className="order-product-name">{o.product_name}</div>
                         <div className="order-biz-name">from {o.business_name}</div>
-                        <div className="order-meta">
-                          Qty {o.quantity} · ₦{Number(o.total_price).toLocaleString()}
-                          {' · '}
-                          <span style={{ color: o.is_paid ? 'var(--green, #04763F)' : 'var(--red)' }}>
-                            {o.is_paid ? '✓ Paid' : 'Unpaid'}
-                          </span>
-                        </div>
-                      </div>
-                      <span className={`order-status status-${o.status.toLowerCase()}`}>{o.status}</span>
-                    </div>
-                    <div className="order-card-bottom">
-                      <span className="order-date">{new Date(o.created_at).toLocaleDateString('en-NG', { day:'numeric', month:'short', year:'numeric' })}</span>
-                      {!o.is_paid ? (
-                        <button className="btn-primary sm" onClick={() => initializePayment(o.id)}>💳 Pay Now</button>
-                      ) : (
-                        <button className="btn-ghost sm" onClick={() => openChat({ id: o.business_id, name: o.business_name })}>💬 Message Seller</button>
-                      )}
-                    </div>
-                    {trackingInfo[o.id] && (
-                      <div className="tracking-panel">
-                        📦 <b>{trackingInfo[o.id].carrier_name || 'Courier'}</b> — {trackingInfo[o.id].status}
-                        {trackingInfo[o.id].tracking_number && <> · #{trackingInfo[o.id].tracking_number}</>}
-                        {trackingInfo[o.id].tracking_url && (
-                          <a href={trackingInfo[o.id].tracking_url} target="_blank" rel="noreferrer" style={{ marginLeft:8, color:'var(--orange)', fontWeight:600 }}>
-                            Track →
-                          </a>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div style={{ textAlign:'center', padding:'60px 20px', color:'var(--text-muted)' }}>
-                <div style={{ fontSize:'3rem', marginBottom:12 }}>🧾</div>
-                <p style={{ fontWeight:600, marginBottom:6 }}>No orders yet</p>
-                <p style={{ fontSize:'0.83rem' }}>Items you buy will show up here.</p>
-                <button className="btn-primary sm" style={{ marginTop:16 }} onClick={() => { showView('explore'); handleMultiSearch(); }}>🔍 Discover Businesses</button>
-              </div>
-            )}
-
-            <nav className="bottom-nav">
-              <button className="bnav-btn" onClick={() => showView('customer-home')}>🏠<span>Home</span></button>
-              <button className="bnav-btn" onClick={() => showView('explore')}>🔍<span>Explore</span></button>
-              <button className="bnav-btn" onClick={() => showView('chat')}>💬<span>Chats</span></button>
-              <button className="bnav-btn active">🧾<span>Orders</span></button>
-              <button className="bnav-btn" onClick={() => showToast('Profile coming soon!')}>👤<span>Profile</span></button>
-            </nav>
-          </div>
-        )}
-
-        {/* ═══════════════════════════════════════════════════════════
-            BUSINESS ORDERS (incoming)
-        ═══════════════════════════════════════════════════════════ */}
-        {view === 'biz-orders' && userProfile && (
-          <div className="view active" style={{ minHeight:'100vh', background:'var(--bg)' }}>
-            <header className="app-header" style={{ flexWrap:'nowrap' }}>
-              <h2 style={{ flex:1, fontSize:'1.05rem', fontFamily:'Syne, sans-serif', margin:0 }}>🧾 Orders</h2>
-              <div className="avatar" onClick={() => setIsMenuOpen(true)} role="button" tabIndex={0}>{avatarLetter}</div>
-            </header>
-
-            {bizOrdersLoading ? (
-              <div style={{ display:'flex', justifyContent:'center', padding:'60px 0' }}><Spinner size={32} /></div>
-            ) : bizOrders.length > 0 ? (
-              <div className="order-list" style={{ padding:14, display:'flex', flexDirection:'column', gap:12, paddingBottom:90 }}>
-                {bizOrders.map(o => (
-                  <div key={o.id} className="order-card">
-                    <div className="order-card-top">
-                      {o.product_image
-                        ? <img src={o.product_image} alt={o.product_name} className="order-thumb" />
-                        : <div className="order-thumb placeholder">📦</div>}
-                      <div style={{ flex:1 }}>
-                        <div className="order-product-name">{o.product_name}</div>
-                        <div className="order-biz-name">buyer: {o.buyer_name}</div>
                         <div className="order-meta">Qty {o.quantity} · ₦{Number(o.total_price).toLocaleString()}</div>
                       </div>
                       <span className={`order-status status-${o.status.toLowerCase()}`}>{o.status}</span>
                     </div>
                     <div className="order-card-bottom">
                       <span className="order-date">{new Date(o.created_at).toLocaleDateString('en-NG', { day:'numeric', month:'short', year:'numeric' })}</span>
-                      <select
-                        className="order-status-select"
-                        value={o.status}
-                        onChange={e => handleUpdateOrderStatus(o.id, e.target.value)}
-                      >
-                        {['Pending','Confirmed','Shipped','Delivered','Cancelled'].map(s => (
-                          <option key={s} value={s}>{s}</option>
-                        ))}
-                      </select>
+                      <button className="btn-ghost sm" onClick={() => openChat({ id: o.business_id, name: o.business_name })}>💬 Message Seller</button>
                     </div>
-                    {trackingInfo[o.id] && (
-                      <div className="tracking-panel">
-                        📦 <b>{trackingInfo[o.id].carrier_name || 'Courier'}</b> — {trackingInfo[o.id].status}
-                        {trackingInfo[o.id].tracking_number && <> · #{trackingInfo[o.id].tracking_number}</>}
-                      </div>
-                    )}
                   </div>
                 ))}
               </div>
             ) : (
               <div style={{ textAlign:'center', padding:'60px 20px', color:'var(--text-muted)' }}>
                 <div style={{ fontSize:'3rem', marginBottom:12 }}>🧾</div>
-                <p style={{ fontWeight:600, marginBottom:6 }}>No orders yet</p>
-                <p style={{ fontSize:'0.83rem' }}>Orders placed on your products will show up here.</p>
-              </div>
-            )}
-
-            <BizBottomNav active="biz-orders" />
-          </div>
-        )}
-
-        {/* ═══════════════════════════════════════════════════════════
-            CHAT OPEN
-        ═══════════════════════════════════════════════════════════ */}
-        {view === 'chat-open' && (
-          <div className="view active">
-            <div className="chat-open-shell">
-              <header className="chat-header">
-                <button
-                  className="back-btn sm"
-                  onClick={() => showView('chat')}
-                  aria-label="Back to messages"
-                  style={{ minWidth:36, minHeight:36, display:'flex', alignItems:'center', justifyContent:'center' }}
-                >←</button>
-                <div className="chat-header-avatar">{(activeChat.name || '?')[0].toUpperCase()}</div>
-                <div className="chat-header-info">
-                  <div className="chat-header-name">{activeChat.name || 'Unknown'}</div>
-                  <div className="chat-header-status">● Online</div>
-                </div>
-                <button className="icon-btn" onClick={() => showToast('Voice call coming soon!')} aria-label="Call">📞</button>
-              </header>
-
-              <div className="chat-messages">
-                {messages.length === 0 && (
-                  <div style={{ textAlign:'center', color:'var(--text-muted)', padding:'40px 20px', fontSize:'0.85rem' }}>
-                    Start the conversation! 👋
-                  </div>
-                )}
-                {messages.map((msg, i) => (
-                  <div key={msg.id || i} className={`msg ${msg.sender === userProfile?.id ? 'me' : 'them'}`}>
-                    <div className="msg-bubble">
-                      {msg.content || msg.text}
-                      <span className="msg-time">
-                        {msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString('en-NG', { hour:'2-digit', minute:'2-digit' }) : ''}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-                <div ref={chatEndRef} />
-              </div>
-
-              <div className="chat-input-bar">
-                <input
-                  type="text"
-                  placeholder="Type a message…"
-                  value={chatInput}
-                  onChange={e => setChatInput(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMessage()}
-                  aria-label="Message input"
-                />
-                <button className="send-btn" onClick={sendMessage} aria-label="Send message">➤</button>
-              </div>
-            </div>
-          </div>
-        )}
-
-      </div>{/* end #app */}
-
-      {/* ═══════════════════════════════════════════════════════════
-          FLOATING AI CHATBOT (always mounted)
-      ═══════════════════════════════════════════════════════════ */}
-      <div className="chatbot-floating-container">
-        {botOpen && (
-          <div className="chat-window" role="dialog" aria-label="AI Advisor">
-            <div className="chat-window-header">
-              <span>🤖 El-Mart Advisor</span>
-              <button onClick={() => setBotOpen(false)} style={{ background:'none', border:'none', color:'white', cursor:'pointer', fontSize:'1.1rem' }} aria-label="Close chatbot">✕</button>
-            </div>
-            <div className="chat-window-messages">
-              {botMessages.map((msg, i) => (
-                <div key={i} className={`bot-msg ${msg.sender === 'user' ? 'bot-msg-user' : 'bot-msg-bot'}`}>{msg.text}</div>
-              ))}
-              {botLoading && <div className="bot-msg bot-msg-bot" style={{ fontStyle:'italic' }}>Thinking… ⏳</div>}
-              <div ref={botEndRef} />
-            </div>
-            <div className="chat-window-input">
-              <input
-                type="text"
-                placeholder="e.g. Is ₦45k fair for iPhone 11?"
-                value={botInput}
-                onChange={e => setBotInput(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && askBot()}
-                aria-label="Ask AI"
-              />
-              <button onClick={askBot} disabled={botLoading}>{botLoading ? '…' : 'Send'}</button>
-            </div>
-          </div>
-        )}
-        <button className="chat-toggle-btn" onClick={() => setBotOpen(p => !p)} title="AI Advisor" aria-label="Toggle AI advisor">
-          {botOpen ? '✕' : '🤖'}
-        </button>
-      </div>
-    </>
-  );
-}
-
+                <p style={{ fontWeig

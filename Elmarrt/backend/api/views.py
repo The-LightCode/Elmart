@@ -29,8 +29,11 @@ from api.serializers import BusinessProfileSerializer # Ensure this matches your
 from .serializers import UserSerializer, ProductSerializer, MessageSerializer
 from django.db.models import Case, When, Value, IntegerField
 # api/views.py
-from .models import User, Product, Message, Subscriber, Order, Post  # <--- Add Subscriber here!
+from .models import User, Product, Message, Subscriber, Order, Post, FeatureBoost, Shipment  # <--- Add Subscriber here!
 import math
+import os
+from django.utils import timezone
+from datetime import timedelta
 from .serializers import ProductSerializer, OrderSerializer, PostSerializer, PublicStoreSerializer
 
 @api_view(['POST'])
@@ -191,7 +194,10 @@ def search_network(request):
 @permission_classes([IsAuthenticated])
 def get_posts(request):
     try:
-        products = Product.objects.select_related('business').order_by('-created_at')
+        # Expire lapsed boosts before ordering, so paying stops mattering the moment it should
+        Product.objects.filter(is_featured=True, featured_until__lt=timezone.now()).update(is_featured=False, featured_until=None)
+
+        products = Product.objects.select_related('business').order_by('-is_featured', '-created_at')
 
         followed_ids = set()
         if request.user.is_authenticated:
@@ -206,6 +212,7 @@ def get_posts(request):
                 "location_state": prod.business.location_state,
                 "tagline": prod.business.tagline,
                 "is_followed": prod.business.id in followed_ids,
+                "is_featured": prod.is_featured,
                 "name": prod.name,
                 "price": str(prod.price),
                 "image": prod.image.url if prod.image else None,
@@ -470,6 +477,455 @@ class PublicStoreView(APIView):
         business.save(update_fields=['view_count'])
         business.refresh_from_db(fields=['view_count'])
         return Response(PublicStoreSerializer(business).data)
+
+
+import requests
+
+PAYSTACK_SECRET_KEY = os.environ.get('PAYSTACK_SECRET_KEY', '')
+PAYSTACK_BASE_URL = 'https://api.paystack.co'
+
+
+class ListBanksView(APIView):
+    """Proxies Paystack's bank list so the frontend can show a real dropdown
+    instead of hardcoding Nigerian bank codes."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        headers = {"Authorization": f"Bearer {PAYSTACK_SECRET_KEY}"}
+        try:
+            r = requests.get(f"{PAYSTACK_BASE_URL}/bank?country=nigeria", headers=headers, timeout=10)
+            data = r.json()
+        except requests.RequestException:
+            return Response({"error": "Could not reach payment provider."}, status=502)
+        return Response(data.get('data', []))
+
+
+class SetupPayoutAccountView(APIView):
+    """
+    A business submits their bank + account number. We verify the account is
+    real via Paystack (catches typos before money is ever involved), then
+    create a Paystack Subaccount so future order payments split automatically —
+    El-Mart's commission stays behind, the rest settles straight to their bank.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        bank_code = request.data.get('bank_code')
+        account_number = request.data.get('account_number')
+        bank_name = request.data.get('bank_name', '')
+        if not bank_code or not account_number:
+            return Response({"error": "bank_code and account_number are required."}, status=400)
+
+        headers = {"Authorization": f"Bearer {PAYSTACK_SECRET_KEY}"}
+
+        # 1. Resolve/verify the account actually exists and belongs to a real bank account
+        try:
+            resolve = requests.get(
+                f"{PAYSTACK_BASE_URL}/bank/resolve",
+                params={"account_number": account_number, "bank_code": bank_code},
+                headers=headers, timeout=10,
+            ).json()
+        except requests.RequestException:
+            return Response({"error": "Could not reach payment provider."}, status=502)
+
+        if not resolve.get('status'):
+            return Response({"error": "Could not verify that account number. Double-check it and try again."}, status=400)
+
+        account_name = resolve['data']['account_name']
+        business = request.user
+
+        # 2. Create (or this is their first time — Paystack subaccounts can't easily be "updated"
+        #    in place for bank details, so we create fresh each time bank info changes)
+        payload = {
+            "business_name": business.business_name or business.username,
+            "settlement_bank": bank_code,
+            "account_number": account_number,
+            "percentage_charge": settings.PLATFORM_COMMISSION_PERCENT,
+        }
+        try:
+            r = requests.post(f"{PAYSTACK_BASE_URL}/subaccount", json=payload, headers=headers, timeout=10)
+            data = r.json()
+        except requests.RequestException:
+            return Response({"error": "Could not reach payment provider."}, status=502)
+
+        if not data.get('status'):
+            return Response({"error": data.get('message', 'Could not set up payout account.')}, status=400)
+
+        business.bank_code = bank_code
+        business.bank_name = bank_name
+        business.account_number = account_number
+        business.account_name = account_name
+        business.paystack_subaccount_code = data['data']['subaccount_code']
+        business.save(update_fields=['bank_code', 'bank_name', 'account_number', 'account_name', 'paystack_subaccount_code'])
+
+        return Response({
+            "message": f"Payout account set up! Future sales pay out to {account_name} automatically.",
+            "account_name": account_name,
+            "subaccount_code": business.paystack_subaccount_code,
+        })
+
+
+class InitializePaymentView(APIView):
+    """
+    Step 1: customer has an unpaid order, wants to pay.
+    We ask Paystack to open a transaction and hand back a checkout URL/reference.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        order_id = request.data.get('order_id')
+        order = get_object_or_404(Order, id=order_id, user=request.user)
+
+        if order.is_paid:
+            return Response({"error": "This order is already paid for."}, status=400)
+
+        headers = {"Authorization": f"Bearer {PAYSTACK_SECRET_KEY}"}
+        payload = {
+            "email": request.user.email,
+            "amount": int((order.total_price + (order.delivery_fee_charged or 0)) * 100),  # Paystack expects kobo, not naira
+            "metadata": {"order_id": order.id, "user_id": request.user.id},
+            "callback_url": request.data.get('callback_url'),  # frontend page to return to
+        }
+
+        # Split automatically to the seller's own bank account, minus El-Mart's commission.
+        # If the seller hasn't set up payout details yet, the full amount goes to El-Mart's
+        # account instead — nothing breaks, but the seller needs to be paid out manually
+        # until they complete setup (visible in Django admin via payment_reference).
+        seller_subaccount = order.product.business.paystack_subaccount_code
+        if seller_subaccount:
+            payload["subaccount"] = seller_subaccount
+            payload["bearer"] = "subaccount"  # seller absorbs the Paystack transaction fee, not El-Mart
+
+        try:
+            r = requests.post(f"{PAYSTACK_BASE_URL}/transaction/initialize",
+                               json=payload, headers=headers, timeout=10)
+            data = r.json()
+        except requests.RequestException:
+            return Response({"error": "Could not reach payment provider. Try again."}, status=502)
+
+        if not data.get('status'):
+            return Response({"error": data.get('message', 'Payment initialization failed.')}, status=400)
+
+        reference = data['data']['reference']
+        order.payment_reference = reference
+        order.save(update_fields=['payment_reference'])
+
+        return Response({
+            "authorization_url": data['data']['authorization_url'],
+            "access_code": data['data']['access_code'],
+            "reference": reference,
+        })
+
+
+class VerifyPaymentView(APIView):
+    """
+    Step 2: after checkout, confirm payment SERVER-SIDE with Paystack directly.
+    Never trust a redirect query param alone — always verify against Paystack's API.
+    Handles both order payments and featured-listing boost payments, since both
+    redirect through the same /payment-callback page on the frontend.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, reference):
+        order = Order.objects.filter(payment_reference=reference, user=request.user).first()
+        boost = None
+        if not order:
+            boost = FeatureBoost.objects.filter(payment_reference=reference, business=request.user).first()
+
+        if not order and not boost:
+            return Response({"error": "Payment reference not found."}, status=404)
+
+        if (order and order.is_paid) or (boost and boost.is_paid):
+            payload = {"status": "success"}
+            if order:
+                payload["order"] = OrderSerializer(order, context={'request': request}).data
+            else:
+                payload["boost"] = {"product_id": boost.product_id, "days": boost.days}
+            return Response(payload)
+
+        headers = {"Authorization": f"Bearer {PAYSTACK_SECRET_KEY}"}
+        try:
+            r = requests.get(f"{PAYSTACK_BASE_URL}/transaction/verify/{reference}",
+                              headers=headers, timeout=10)
+            data = r.json()
+        except requests.RequestException:
+            return Response({"error": "Could not reach payment provider. Try again."}, status=502)
+
+        paystack_status = data.get('data', {}).get('status')
+        if not (data.get('status') and paystack_status == 'success'):
+            return Response({"status": paystack_status or "failed"}, status=400)
+
+        if order:
+            order.is_paid = True
+            order.status = 'Confirmed'
+            order.save(update_fields=['is_paid', 'status', 'updated_at'])
+            if order.pending_rate_id:
+                _book_shipment(order, order.pending_rate_id, order.delivery_fee_charged)
+                order.refresh_from_db()
+            return Response({"status": "success", "order": OrderSerializer(order, context={'request': request}).data})
+        else:
+            boost.is_paid = True
+            boost.save(update_fields=['is_paid'])
+            product = boost.product
+            product.is_featured = True
+            product.featured_until = timezone.now() + timedelta(days=boost.days)
+            product.save(update_fields=['is_featured', 'featured_until'])
+            return Response({"status": "success", "boost": {"product_id": product.id, "days": boost.days}})
+
+
+class InitializeBoostPaymentView(APIView):
+    """
+    'Pure software' revenue: a business pays El-Mart directly (no subaccount split —
+    this money is El-Mart's, not the seller's) to feature a product higher in
+    search/feed for a set number of days.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        product_id = request.data.get('product_id')
+        days = int(request.data.get('days', 7))
+        product = get_object_or_404(Product, id=product_id, business=request.user)
+
+        price = settings.FEATURE_BOOST_PRICES.get(days)
+        if price is None:
+            return Response({"error": f"Choose one of {list(settings.FEATURE_BOOST_PRICES.keys())} days."}, status=400)
+
+        headers = {"Authorization": f"Bearer {PAYSTACK_SECRET_KEY}"}
+        payload = {
+            "email": request.user.email,
+            "amount": int(price * 100),
+            "metadata": {"purpose": "boost", "product_id": product.id, "days": days},
+            "callback_url": request.data.get('callback_url'),
+            # Deliberately NO subaccount here — this is El-Mart's own revenue.
+        }
+        try:
+            r = requests.post(f"{PAYSTACK_BASE_URL}/transaction/initialize",
+                               json=payload, headers=headers, timeout=10)
+            data = r.json()
+        except requests.RequestException:
+            return Response({"error": "Could not reach payment provider. Try again."}, status=502)
+
+        if not data.get('status'):
+            return Response({"error": data.get('message', 'Payment initialization failed.')}, status=400)
+
+        reference = data['data']['reference']
+        FeatureBoost.objects.create(
+            product=product, business=request.user, days=days,
+            amount=price, payment_reference=reference,
+        )
+        return Response({
+            "authorization_url": data['data']['authorization_url'],
+            "reference": reference,
+            "price": price,
+        })
+
+
+TERMINAL_BASE_URL = 'https://api.terminal.africa/v1'
+
+
+def _terminal_headers():
+    return {"Authorization": f"Bearer {settings.TERMINAL_API_KEY}", "Content-Type": "application/json"}
+
+
+def _ensure_business_terminal_address(business):
+    """Create (once) and cache a Terminal Address object for this business's pickup location."""
+    if business.terminal_address_id:
+        return business.terminal_address_id
+    payload = {
+        "name": business.business_name or business.username,
+        "first_name": (business.first_name or business.business_name or business.username or "Business"),
+        "last_name": (business.last_name or "Owner"),
+        "email": business.email,
+        "phone": business.phone_number or "",
+        "line1": business.street_address or business.business_name or "Address on file",
+        "city": business.location_state or "Lagos",
+        "state": business.location_state or "Lagos",
+        "country": "NG",
+    }
+    r = requests.post(f"{TERMINAL_BASE_URL}/addresses", json=payload, headers=_terminal_headers(), timeout=10)
+    data = r.json()
+    if not data.get('status'):
+        raise ValueError(data.get('message', 'Could not register pickup address with Terminal Africa.'))
+    business.terminal_address_id = data['data']['address_id']
+    business.save(update_fields=['terminal_address_id'])
+    return business.terminal_address_id
+
+
+class GetShippingRatesView(APIView):
+    """
+    Step 1 of logistics: given an order + a delivery address, ask Terminal Africa
+    for available couriers/rates. Every rate returned already has El-Mart's
+    delivery-fee commission (DELIVERY_MARKUP_PERCENT) baked into 'charged_amount' —
+    that's the "delivery fee margin" revenue line from the handbook, applied here.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        order = get_object_or_404(
+            Order.objects.filter(models.Q(user=request.user) | models.Q(product__business=request.user)),
+            id=request.data.get('order_id'),
+        )
+        delivery_address = request.data.get('delivery_address')
+        delivery_city = request.data.get('delivery_city')
+        delivery_state = request.data.get('delivery_state', delivery_city)
+
+        if not delivery_address or not delivery_city:
+            return Response({"error": "delivery_address and delivery_city are required."}, status=400)
+
+        try:
+            pickup_address_id = _ensure_business_terminal_address(order.product.business)
+        except ValueError as e:
+            return Response({"error": str(e)}, status=502)
+
+        headers = _terminal_headers()
+
+        # Create (or reuse) the delivery address for this order
+        if not order.terminal_delivery_address_id:
+            addr_payload = {
+                "name": request.user.get_full_name() or request.user.username,
+                "first_name": request.user.first_name or request.user.username,
+                "last_name": request.user.last_name or "Customer",
+                "email": request.user.email,
+                "phone": request.user.phone_number or "",
+                "line1": delivery_address,
+                "city": delivery_city,
+                "state": delivery_state,
+                "country": "NG",
+            }
+            r = requests.post(f"{TERMINAL_BASE_URL}/addresses", json=addr_payload, headers=headers, timeout=10)
+            data = r.json()
+            if not data.get('status'):
+                return Response({"error": data.get('message', 'Could not register delivery address.')}, status=400)
+            order.terminal_delivery_address_id = data['data']['address_id']
+            order.delivery_address = delivery_address
+            order.delivery_city = delivery_city
+            order.save(update_fields=['terminal_delivery_address_id', 'delivery_address', 'delivery_city'])
+
+        # Create (or reuse) the parcel for this order
+        # NOTE: verify this payload shape against Terminal's Postman collection —
+        # the exact required fields for `items` weren't fully confirmed at build time.
+        if not order.terminal_parcel_id:
+            parcel_payload = {
+                "packaging": settings.TERMINAL_DEFAULT_PACKAGING_ID,
+                "weight_unit": "kg",
+                "items": [{
+                    "name": order.product.name,
+                    "description": order.product.name,
+                    "quantity": order.quantity,
+                    "weight": float(order.product.weight_kg),
+                    "value": float(order.product.price),
+                }],
+            }
+            r = requests.post(f"{TERMINAL_BASE_URL}/parcels", json=parcel_payload, headers=headers, timeout=10)
+            data = r.json()
+            if not data.get('status'):
+                return Response({"error": data.get('message', 'Could not create parcel for shipment.')}, status=400)
+            order.terminal_parcel_id = data['data']['parcel_id']
+            order.save(update_fields=['terminal_parcel_id'])
+
+        # Get rates
+        r = requests.get(f"{TERMINAL_BASE_URL}/rates/shipment", headers=headers, params={
+            "parcel_id": order.terminal_parcel_id,
+            "pickup_address": pickup_address_id,
+            "delivery_address": order.terminal_delivery_address_id,
+        }, timeout=15)
+        data = r.json()
+        if not data.get('status'):
+            return Response({"error": data.get('message', 'Could not fetch shipping rates.')}, status=400)
+
+        markup = 1 + (settings.DELIVERY_MARKUP_PERCENT / 100)
+        rates = [{
+            "rate_id": rt.get('id'),
+            "carrier_name": rt.get('carrier_name'),
+            "carrier_logo": rt.get('carrier_logo'),
+            "delivery_time": rt.get('delivery_time'),
+            "base_amount": rt.get('amount'),
+            "charged_amount": round(rt.get('amount', 0) * markup, 2),  # what the customer actually pays
+        } for rt in data.get('data', [])]
+
+        return Response({"rates": rates})
+
+
+def _book_shipment(order, rate_id, charged_amount):
+    """Actually books the courier with Terminal Africa. Called only after payment
+    succeeds, so El-Mart never pays Terminal for an abandoned/unpaid checkout."""
+    headers = _terminal_headers()
+    r = requests.post(f"{TERMINAL_BASE_URL}/shipments", json={"rate_id": rate_id}, headers=headers, timeout=15)
+    data = r.json()
+    if not data.get('status'):
+        return None  # payment still succeeded even if booking fails — don't blow up verify()
+
+    shipment_data = data['data']
+    extras = shipment_data.get('shipment_extras', {}) or {}
+    shipment, _ = Shipment.objects.update_or_create(
+        order=order,
+        defaults={
+            "terminal_shipment_id": shipment_data.get('id'),
+            "rate_id": rate_id,
+            "carrier_name": shipment_data.get('carrier', {}).get('name') if isinstance(shipment_data.get('carrier'), dict) else None,
+            "tracking_number": extras.get('tracking_number'),
+            "tracking_url": extras.get('tracking_url') or extras.get('carrier_tracking_url'),
+            "status": shipment_data.get('status', 'confirmed'),
+            "cost": charged_amount,
+        }
+    )
+    order.delivery_fee_charged = charged_amount
+    order.pending_rate_id = None
+    order.save(update_fields=['delivery_fee_charged', 'pending_rate_id'])
+    return shipment
+
+
+class SelectShipmentRateView(APIView):
+    """
+    A business/customer picks a rate before payment. We DON'T book it with Terminal
+    yet — we just remember the choice on the order — so El-Mart never pays for a
+    courier on an order that never gets paid for. Booking happens automatically
+    in VerifyPaymentView once payment actually succeeds.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        order = get_object_or_404(Order, id=request.data.get('order_id'))
+        rate_id = request.data.get('rate_id')
+        charged_amount = request.data.get('charged_amount')
+        if not rate_id:
+            return Response({"error": "rate_id is required."}, status=400)
+
+        order.pending_rate_id = rate_id
+        order.delivery_fee_charged = charged_amount  # used to compute the payment amount
+        order.save(update_fields=['pending_rate_id', 'delivery_fee_charged'])
+        return Response({"message": "Delivery option selected. It'll be booked once payment is confirmed."})
+
+
+class TrackShipmentView(APIView):
+    """Pulls the latest status from Terminal Africa for both customer and business to see."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, order_id):
+        shipment = get_object_or_404(Shipment, order_id=order_id)
+        # Access check: only the buyer or the selling business can view tracking
+        order = shipment.order
+        if request.user not in (order.user, order.product.business):
+            return Response({"error": "Not authorized to view this shipment."}, status=403)
+
+        if shipment.terminal_shipment_id:
+            headers = _terminal_headers()
+            try:
+                r = requests.get(f"{TERMINAL_BASE_URL}/shipments/{shipment.terminal_shipment_id}", headers=headers, timeout=10)
+                data = r.json()
+                if data.get('status'):
+                    shipment.status = data['data'].get('status', shipment.status)
+                    shipment.save(update_fields=['status', 'updated_at'])
+            except requests.RequestException:
+                pass  # fall back to whatever we last knew
+
+        return Response({
+            "carrier_name": shipment.carrier_name,
+            "tracking_number": shipment.tracking_number,
+            "tracking_url": shipment.tracking_url,
+            "status": shipment.status,
+            "cost": shipment.cost,
+        })
 
 
 class CreateOrderView(generics.CreateAPIView):
