@@ -21,6 +21,10 @@ class User(AbstractUser):
     latitude = models.DecimalField(max_digits=9, decimal_places=6, blank=True, null=True)
     longitude = models.DecimalField(max_digits=9, decimal_places=6, blank=True, null=True)
 
+    # Does this business have a real physical outlet customers can visit, or is
+    # it remote/online-only? Shown conspicuously on their storefront + in search.
+    has_physical_outlet = models.BooleanField(default=False)
+
     # Users (customers) following businesses. views.toggle_follow already
     # relies on `me.following` / `target_user.followers` — this field was
     # referenced in code but never actually defined, which is why /api/follow/
@@ -38,6 +42,17 @@ class User(AbstractUser):
     # Public storefront URL, e.g. elmart.com/store/mama-ngozi-store
     # Nullable so it never blocks existing rows; auto-filled on save() below.
     slug = models.SlugField(max_length=140, unique=True, blank=True, null=True)
+
+    # ── Payout details (Paystack Subaccount, for automatic split payments) ──
+    bank_name = models.CharField(max_length=100, blank=True, null=True)
+    bank_code = models.CharField(max_length=10, blank=True, null=True)
+    account_number = models.CharField(max_length=20, blank=True, null=True)
+    account_name = models.CharField(max_length=255, blank=True, null=True)  # returned by Paystack's verification
+    paystack_subaccount_code = models.CharField(max_length=100, blank=True, null=True)
+
+    # ── Logistics (Terminal Africa) — pickup address for this business ──
+    street_address = models.CharField(max_length=255, blank=True, null=True)
+    terminal_address_id = models.CharField(max_length=100, blank=True, null=True)  # cached, avoids recreating on Terminal every time
 
     def save(self, *args, **kwargs):
         if not self.slug and self.business_name:
@@ -63,6 +78,7 @@ class Product(models.Model):
     price = models.DecimalField(max_digits=12, decimal_places=2)
     stock = models.IntegerField(default=0)
     image = models.ImageField(upload_to='products/', blank=True, null=True) # Thumbnail
+    weight_kg = models.DecimalField(max_digits=6, decimal_places=2, default=1.0)  # for logistics rate calculation
     created_at = models.DateTimeField(auto_now_add=True)
     following = models.ManyToManyField(
         "self", 
@@ -71,8 +87,28 @@ class Product(models.Model):
         blank=True
     )
 
+    # ── "Pure software" revenue: paid boosts that push a product higher in search/feed ──
+    is_featured = models.BooleanField(default=False)
+    featured_until = models.DateTimeField(blank=True, null=True)
+
     def __str__(self):
         return self.name
+
+
+class FeatureBoost(models.Model):
+    """One purchase of a featured-listing boost for a product. 100% platform revenue —
+    no subaccount split, unlike Order payments, because this is the business paying
+    El-Mart directly, not a customer paying the business."""
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='boosts')
+    business = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='boosts')
+    days = models.PositiveIntegerField(default=7)
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    payment_reference = models.CharField(max_length=100, unique=True)
+    is_paid = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Boost #{self.id} for {self.product.name} ({self.days}d)"
     
 # 2. THE MULTIMEDIA (KEEP THIS)
 class ProductMedia(models.Model):
@@ -126,12 +162,43 @@ class Order(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    # Payment tracking (Paystack)
+    is_paid = models.BooleanField(default=False)
+    payment_reference = models.CharField(max_length=100, blank=True, null=True, unique=True)
+
+    # ── Logistics (Terminal Africa) ──
+    delivery_address = models.TextField(blank=True, null=True)
+    delivery_city = models.CharField(max_length=100, blank=True, null=True)
+    terminal_delivery_address_id = models.CharField(max_length=100, blank=True, null=True)
+    terminal_parcel_id = models.CharField(max_length=100, blank=True, null=True)
+    # base = what Terminal actually charges El-Mart; charged = base + commission markup, what the customer pays
+    delivery_fee_base = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
+    delivery_fee_charged = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
+    pending_rate_id = models.CharField(max_length=100, blank=True, null=True)  # chosen but not yet booked — booked only after payment succeeds
+
     @property
     def total_price(self):
         return self.product.price * self.quantity
 
     def __str__(self):
         return f"Order {self.id} by {self.user.username}"
+
+
+class Shipment(models.Model):
+    """One arranged delivery for an order, booked through Terminal Africa."""
+    order = models.OneToOneField(Order, on_delete=models.CASCADE, related_name='shipment')
+    terminal_shipment_id = models.CharField(max_length=100, blank=True, null=True)
+    rate_id = models.CharField(max_length=100)
+    carrier_name = models.CharField(max_length=100, blank=True, null=True)
+    tracking_number = models.CharField(max_length=100, blank=True, null=True)
+    tracking_url = models.URLField(blank=True, null=True)
+    status = models.CharField(max_length=50, default='pending')  # pending/confirmed/in-transit/delivered/cancelled
+    cost = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Shipment for Order #{self.order_id} — {self.status}"
 
 class Post(models.Model):
     business = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='posts')
